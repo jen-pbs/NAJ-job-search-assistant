@@ -1,7 +1,7 @@
 import json
 from openai import AsyncOpenAI
 
-GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
 from app.models.schemas import LinkedInProfile
 
@@ -43,11 +43,11 @@ async def score_profiles(
         for i, p in enumerate(profiles)
     )
 
-    client = AsyncOpenAI(api_key=api_key, base_url=GEMINI_BASE_URL)
+    client = AsyncOpenAI(api_key=api_key, base_url=GROQ_BASE_URL)
 
     try:
         response = await client.chat.completions.create(
-            model="gemini-2.0-flash",
+            model="llama-3.3-70b-versatile",
             messages=[
                 {
                     "role": "user",

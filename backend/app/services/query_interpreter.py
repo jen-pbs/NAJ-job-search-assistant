@@ -1,7 +1,7 @@
 from openai import AsyncOpenAI
 import json
 
-GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
 from app.models.schemas import SearchQuery
 
@@ -27,11 +27,11 @@ async def interpret_query(query: str, api_key: str) -> SearchQuery:
     if not api_key:
         return SearchQuery(query=query)
 
-    client = AsyncOpenAI(api_key=api_key, base_url=GEMINI_BASE_URL)
+    client = AsyncOpenAI(api_key=api_key, base_url=GROQ_BASE_URL)
 
     try:
         response = await client.chat.completions.create(
-            model="gemini-2.0-flash",
+            model="llama-3.3-70b-versatile",
             messages=[
                 {
                     "role": "user",

@@ -29,5 +29,5 @@ async def health():
         "status": "ok",
         "search_configured": True,
         "notion_configured": bool(settings.notion_api_key),
-        "ai_configured": bool(settings.gemini_api_key),
+        "ai_configured": bool(settings.groq_api_key),
     }

@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Job Search Assistant",
-  description: "AI-powered networking and job search tool",
+  title: "NAJ Search Assistant",
+  description: "Network And Job search assistant - AI-powered people discovery for informational interviews",
 };
 
 export default function RootLayout({

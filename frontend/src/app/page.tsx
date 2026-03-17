@@ -32,42 +32,67 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 py-12">
-        <div className="text-center mb-10">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Job Search Assistant
-          </h1>
-          <p className="text-gray-500 text-sm">
-            Find people for informational interviews. Describe who you are looking for and let AI do the rest.
+    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
+      {/* Header */}
+      <header className="border-b border-slate-200/60 bg-white/70 backdrop-blur-sm sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-sm">
+              <span className="text-white font-bold text-sm">N</span>
+            </div>
+            <div>
+              <h1 className="text-lg font-semibold text-slate-900 tracking-tight">
+                NAJ <span className="text-indigo-600">Search</span>
+              </h1>
+              <p className="text-[10px] text-slate-400 -mt-0.5 tracking-wide uppercase">
+                Network &amp; Job Assistant
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <StatusBanner />
+          </div>
+        </div>
+      </header>
+
+      {/* Hero + Search */}
+      <div className="max-w-5xl mx-auto px-6 pt-12 pb-6">
+        <div className="text-center mb-8">
+          <h2 className="text-2xl font-semibold text-slate-800 mb-2">
+            Find the right people to talk to
+          </h2>
+          <p className="text-slate-500 text-sm max-w-lg mx-auto">
+            Describe who you&apos;re looking for. NAJ searches LinkedIn profiles, scores relevance with AI, and explains why each person is a good match.
           </p>
         </div>
 
-        <StatusBanner />
-
         <SearchBar onSearch={handleSearch} isLoading={isLoading} />
+      </div>
 
+      {/* Results */}
+      <div className="max-w-5xl mx-auto px-6 pb-20">
         {error && (
-          <div className="mt-6 bg-red-50 border border-red-200 rounded-xl p-4 max-w-3xl mx-auto">
-            <p className="text-sm text-red-700">{error}</p>
+          <div className="mt-4 bg-red-50 border border-red-200/60 rounded-xl p-4">
+            <p className="text-sm text-red-600">{error}</p>
           </div>
         )}
 
         {queryUsed && (
-          <div className="mt-8 max-w-3xl mx-auto">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-sm text-gray-500">
-                Found <span className="font-medium text-gray-700">{totalFound}</span> profiles
-              </p>
-              <p className="text-xs text-gray-400 max-w-md truncate" title={queryUsed}>
-                Query: {queryUsed}
+          <div className="mt-6 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-indigo-500"></div>
+              <p className="text-sm text-slate-600">
+                <span className="font-semibold text-slate-800">{totalFound}</span> profiles found
               </p>
             </div>
+            <p className="text-xs text-slate-400 max-w-sm truncate font-mono" title={queryUsed}>
+              {queryUsed}
+            </p>
           </div>
         )}
 
         {profiles.length > 0 && (
-          <div className="mt-4 max-w-3xl mx-auto space-y-3">
+          <div className="mt-4 space-y-3">
             {profiles.map((profile, i) => (
               <ProfileCard key={profile.linkedin_url} profile={profile} index={i} />
             ))}
@@ -75,20 +100,27 @@ export default function Home() {
         )}
 
         {isLoading && (
-          <div className="mt-12 text-center">
-            <div className="inline-flex items-center gap-3 text-gray-500">
-              <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              <span className="text-sm">Searching LinkedIn profiles via Google...</span>
+          <div className="mt-16 flex flex-col items-center gap-4">
+            <div className="relative">
+              <div className="w-12 h-12 rounded-full border-2 border-indigo-100 border-t-indigo-500 animate-spin"></div>
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium text-slate-600">Searching LinkedIn profiles...</p>
+              <p className="text-xs text-slate-400 mt-1">This may take 10-15 seconds</p>
             </div>
           </div>
         )}
 
         {!isLoading && profiles.length === 0 && !error && !queryUsed && (
-          <div className="mt-16 text-center text-gray-400 text-sm">
-            <p>Enter a search query above to find people for informational interviews.</p>
+          <div className="mt-20 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+              </svg>
+            </div>
+            <p className="text-slate-400 text-sm">
+              Describe who you want to connect with above
+            </p>
           </div>
         )}
       </div>

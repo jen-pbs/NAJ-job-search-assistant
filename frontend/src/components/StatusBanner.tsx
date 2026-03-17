@@ -15,39 +15,36 @@ export default function StatusBanner() {
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
-        <p className="text-sm text-red-700 font-medium">Backend not reachable</p>
-        <p className="text-xs text-red-500 mt-1">
-          Make sure the FastAPI server is running: <code className="bg-red-100 px-1 rounded">uvicorn app.main:app --reload</code> from the backend directory.
-        </p>
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 border border-red-200/60 rounded-lg">
+        <div className="w-2 h-2 rounded-full bg-red-400"></div>
+        <span className="text-xs text-red-600 font-medium">Backend offline</span>
       </div>
     );
   }
 
   if (!health) return null;
 
-  const missing: string[] = [];
-  if (!health.search_configured) missing.push("Search Engine");
-  if (!health.notion_configured) missing.push("Notion API");
-  if (!health.ai_configured) missing.push("Groq API (optional, for AI scoring)");
+  const allGood = health.search_configured && health.notion_configured;
 
-  if (missing.length === 0) return null;
+  if (allGood && health.ai_configured) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200/60 rounded-lg">
+        <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
+        <span className="text-xs text-emerald-600 font-medium">All systems ready</span>
+      </div>
+    );
+  }
+
+  const missing: string[] = [];
+  if (!health.notion_configured) missing.push("Notion");
+  if (!health.ai_configured) missing.push("AI scoring");
 
   return (
-    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
-      <p className="text-sm text-amber-700 font-medium">Setup incomplete</p>
-      <p className="text-xs text-amber-600 mt-1">
-        Missing: {missing.join(", ")}. Check the{" "}
-        <a
-          href="http://localhost:8000/api/search/setup-guide"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline hover:text-amber-800"
-        >
-          setup guide
-        </a>{" "}
-        for instructions.
-      </p>
+    <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200/60 rounded-lg">
+      <div className="w-2 h-2 rounded-full bg-amber-400"></div>
+      <span className="text-xs text-amber-600">
+        Missing: {missing.join(", ")}
+      </span>
     </div>
   );
 }

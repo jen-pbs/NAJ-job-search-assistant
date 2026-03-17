@@ -22,8 +22,8 @@ async def find_people(
     """Find LinkedIn profiles matching the search criteria."""
 
     interpreted = body
-    if settings.openai_api_key:
-        interpreted = await interpret_query(body.query, settings.openai_api_key)
+    if settings.groq_api_key:
+        interpreted = await interpret_query(body.query, settings.groq_api_key)
         interpreted.max_results = body.max_results
 
     profiles, query_used = await search_linkedin_profiles(
@@ -34,9 +34,9 @@ async def find_people(
         max_results=interpreted.max_results,
     )
 
-    if settings.openai_api_key and profiles:
+    if settings.groq_api_key and profiles:
         profiles = await score_profiles(
-            profiles, body.query, settings.openai_api_key
+            profiles, body.query, settings.groq_api_key
         )
 
     return SearchResponse(
@@ -105,15 +105,13 @@ async def list_saved_contacts(settings: Settings = Depends(get_settings)):
 async def setup_guide():
     """Return setup instructions for required API keys."""
     return {
-        "brave_search": {
-            "description": "Required for LinkedIn profile discovery",
+        "search": {
+            "description": "LinkedIn profile discovery via Playwright + Google",
             "steps": [
-                "1. Go to https://api-dashboard.search.brave.com/",
-                "2. Sign up for a free account (no credit card needed)",
-                "3. Subscribe to the Free plan (2000 queries/month)",
-                "4. Copy your API key to .env as BRAVE_API_KEY",
+                "No setup needed! Search uses a headless browser automatically.",
+                "Just start the backend and search.",
             ],
-            "free_tier": "2000 queries/month",
+            "free_tier": "Unlimited (no API key required)",
         },
         "notion": {
             "description": "Required for saving contacts to your existing database",
@@ -126,13 +124,15 @@ async def setup_guide():
                 "6. Click '...' menu > 'Connections' > Add your integration",
             ],
         },
-        "openai": {
-            "description": "Optional - enables AI query interpretation and relevance scoring",
+        "groq": {
+            "description": "Optional (free) - enables AI query interpretation and relevance scoring",
             "steps": [
-                "1. Go to https://platform.openai.com/api-keys",
-                "2. Create a new API key",
-                "3. Copy to .env as OPENAI_API_KEY",
+                "1. Go to https://console.groq.com/",
+                "2. Sign up (free, no credit card)",
+                "3. Go to API Keys > Create API Key",
+                "4. Copy to .env as GROQ_API_KEY",
             ],
+            "free_tier": "30 requests/minute, free forever",
             "note": "The app works without this, but search results won't be scored or ranked",
         },
     }

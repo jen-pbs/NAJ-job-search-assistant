@@ -1,6 +1,8 @@
 from openai import AsyncOpenAI
 import json
 
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+
 from app.models.schemas import SearchQuery
 
 
@@ -25,11 +27,11 @@ async def interpret_query(query: str, api_key: str) -> SearchQuery:
     if not api_key:
         return SearchQuery(query=query)
 
-    client = AsyncOpenAI(api_key=api_key)
+    client = AsyncOpenAI(api_key=api_key, base_url=GROQ_BASE_URL)
 
     try:
         response = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="llama-3.3-70b-versatile",
             messages=[
                 {
                     "role": "user",

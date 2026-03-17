@@ -39,7 +39,7 @@ export interface HealthStatus {
   status: string;
   search_configured: boolean;
   notion_configured: boolean;
-  openai_configured: boolean;
+  ai_configured: boolean;
 }
 
 export async function checkHealth(): Promise<HealthStatus> {

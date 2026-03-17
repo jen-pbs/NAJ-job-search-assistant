@@ -4,6 +4,7 @@ import { useState } from "react";
 import SearchBar from "@/components/SearchBar";
 import ProfileCard from "@/components/ProfileCard";
 import StatusBanner from "@/components/StatusBanner";
+import NetworkBackground from "@/components/NetworkBackground";
 import { findPeople, LinkedInProfile } from "@/lib/api";
 
 export default function Home() {
@@ -32,9 +33,11 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
+    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 relative">
+      <NetworkBackground />
+
       {/* Header */}
-      <header className="border-b border-slate-200/60 bg-white/70 backdrop-blur-sm sticky top-0 z-10">
+      <header className="border-b border-slate-200/60 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-sm">
@@ -56,7 +59,7 @@ export default function Home() {
       </header>
 
       {/* Hero + Search */}
-      <div className="max-w-5xl mx-auto px-6 pt-12 pb-6">
+      <div className="max-w-5xl mx-auto px-6 pt-12 pb-6 relative z-[1]">
         <div className="text-center mb-8">
           <h2 className="text-2xl font-semibold text-slate-800 mb-2">
             Find the right people to talk to
@@ -70,7 +73,7 @@ export default function Home() {
       </div>
 
       {/* Results */}
-      <div className="max-w-5xl mx-auto px-6 pb-20">
+      <div className="max-w-5xl mx-auto px-6 pb-20 relative z-[1]">
         {error && (
           <div className="mt-4 bg-red-50 border border-red-200/60 rounded-xl p-4">
             <p className="text-sm text-red-600">{error}</p>

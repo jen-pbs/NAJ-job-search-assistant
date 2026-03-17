@@ -11,7 +11,6 @@ from app.models.schemas import LinkedInProfile
 
 _executor = ThreadPoolExecutor(max_workers=2)
 
-# Rate limiter: max 10 searches per hour
 _search_timestamps: deque[float] = deque()
 MAX_SEARCHES_PER_HOUR = 10
 
@@ -26,7 +25,6 @@ window.chrome = {runtime: {}};
 def _check_rate_limit() -> str | None:
     """Returns error message if rate limited, None if OK."""
     now = time.time()
-    # Remove timestamps older than 1 hour
     while _search_timestamps and _search_timestamps[0] < now - 3600:
         _search_timestamps.popleft()
 
@@ -47,7 +45,7 @@ def build_search_queries(
 ) -> list[str]:
     """Build search queries optimized for LinkedIn profile discovery."""
     base = "site:linkedin.com/in"
-    parts = [base, f'"{query}"']
+    parts = [base, query]
 
     if location:
         parts.append(f'"{location}"')
@@ -64,7 +62,7 @@ def build_search_queries(
     if companies and len(companies) > 5:
         mid = len(companies) // 2
         for chunk in [companies[:mid], companies[mid:]]:
-            chunk_parts = [base, f'"{query}"']
+            chunk_parts = [base, query]
             if location:
                 chunk_parts.append(f'"{location}"')
             chunk_clause = " OR ".join(f'"{c}"' for c in chunk)
@@ -74,19 +72,20 @@ def build_search_queries(
     return queries
 
 
-def _search_google_sync(query: str, max_results: int = 20) -> list[dict]:
-    """Search Google using the user's installed Chrome with stealth measures."""
+def _search_duckduckgo_sync(query: str, max_results: int = 20) -> list[dict]:
+    """Search DuckDuckGo using Playwright. No CAPTCHAs, no blocking."""
     results = []
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            channel="chrome",
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-            ],
-        )
+        try:
+            browser = p.chromium.launch(
+                headless=True,
+                channel="chrome",
+                args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
+            )
+        except Exception:
+            browser = p.chromium.launch(headless=True)
+
         context = browser.new_context(
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -101,76 +100,61 @@ def _search_google_sync(query: str, max_results: int = 20) -> list[dict]:
         page = context.new_page()
 
         try:
-            url = "https://www.google.com/search?q=" + query.replace(" ", "+") + f"&num={min(max_results, 20)}&hl=en"
+            url = f"https://duckduckgo.com/?q={query.replace(' ', '+')}"
             page.goto(url, wait_until="domcontentloaded")
-            time.sleep(random.uniform(2.0, 4.0))
+            time.sleep(random.uniform(2.0, 3.5))
 
-            # Handle cookie consent
-            try:
-                accept_btn = page.locator("button:has-text('Accept all'), button:has-text('Accept'), button:has-text('I agree')")
-                if accept_btn.count() > 0:
-                    accept_btn.first.click()
-                    time.sleep(1)
-            except Exception:
-                pass
+            # DuckDuckGo result extraction
+            result_links = page.locator("a[href*='linkedin.com/in/']")
+            count = result_links.count()
+            seen_hrefs: set[str] = set()
 
-            # Check for CAPTCHA
-            content = page.content()
-            if "sorry" in content.lower() and "unusual traffic" in content.lower():
-                print("Google CAPTCHA detected. Try again later or reduce search frequency.")
-                browser.close()
-                return []
-
-            # Extract search results
-            result_elements = page.locator("div.g")
-            count = result_elements.count()
-
-            for i in range(min(count, max_results)):
+            for i in range(count):
+                if len(results) >= max_results:
+                    break
                 try:
-                    el = result_elements.nth(i)
+                    el = result_links.nth(i)
+                    href = el.get_attribute("href") or ""
+                    if "linkedin.com/in/" not in href:
+                        continue
 
-                    link_el = el.locator("a").first
-                    href = link_el.get_attribute("href") or ""
+                    clean_href = re.sub(r"\?.*$", "", href)
+                    if clean_href in seen_hrefs:
+                        continue
+                    seen_hrefs.add(clean_href)
 
-                    title_el = el.locator("h3").first
-                    title = title_el.inner_text() if title_el.count() > 0 else ""
+                    text = el.inner_text().strip()
 
+                    # Try to get snippet from the parent result container
                     snippet = ""
-                    for sel in ["div[data-sncf]", "div.VwiC3b", "span.aCOpRe", "div[style='-webkit-line-clamp:2']"]:
-                        snippet_el = el.locator(sel).first
-                        if snippet_el.count() > 0:
-                            snippet = snippet_el.inner_text()
-                            break
+                    try:
+                        article = el.locator("xpath=ancestor::article").first
+                        if article.count() > 0:
+                            snippet_el = article.locator("div[data-result='snippet']").first
+                            if snippet_el.count() > 0:
+                                snippet = snippet_el.inner_text().strip()
+                    except Exception:
+                        pass
 
-                    if href:
-                        results.append({
-                            "link": href,
-                            "title": title,
-                            "snippet": snippet,
-                        })
+                    if not snippet:
+                        try:
+                            parent = el.locator("xpath=..").first
+                            sibling = parent.locator("xpath=following-sibling::*").first
+                            if sibling.count() > 0:
+                                snippet = sibling.inner_text().strip()[:200]
+                        except Exception:
+                            pass
+
+                    results.append({
+                        "link": clean_href,
+                        "title": text if text else "",
+                        "snippet": snippet,
+                    })
                 except Exception:
                     continue
 
-            # Fallback: extract LinkedIn links directly
-            if not results:
-                all_links = page.locator("a[href*='linkedin.com/in/']")
-                link_count = all_links.count()
-                for i in range(min(link_count, max_results)):
-                    try:
-                        el = all_links.nth(i)
-                        href = el.get_attribute("href") or ""
-                        text = el.inner_text()
-                        if "linkedin.com/in/" in href:
-                            results.append({
-                                "link": href,
-                                "title": text,
-                                "snippet": "",
-                            })
-                    except Exception:
-                        continue
-
         except Exception as e:
-            print(f"Playwright search error: {e}")
+            print(f"DuckDuckGo search error: {e}")
         finally:
             browser.close()
 
@@ -186,12 +170,17 @@ def parse_linkedin_result(item: dict) -> LinkedInProfile | None:
     title = item.get("title", "")
     snippet = item.get("snippet", "")
 
-    if not title:
-        return _parse_url_into_profile(link)
+    if not title or title.startswith("http"):
+        return _parse_url_into_profile(link, snippet)
 
+    # Clean common LinkedIn title patterns: "Name - Title - Company | LinkedIn"
     name = title.split(" - ")[0].strip() if " - " in title else title.split("|")[0].strip()
     name = re.sub(r"\s*\|.*$", "", name)
     name = re.sub(r"\s*–.*$", "", name)
+    name = re.sub(r"\s*LinkedIn\s*$", "", name, flags=re.IGNORECASE).strip()
+
+    if not name:
+        return _parse_url_into_profile(link, snippet)
 
     headline = None
     if " - " in title:
@@ -200,6 +189,7 @@ def parse_linkedin_result(item: dict) -> LinkedInProfile | None:
             headline = parts[1].strip()
             headline = re.sub(r"\s*\|.*$", "", headline)
             headline = re.sub(r"\s*–.*$", "", headline)
+            headline = re.sub(r"\s*LinkedIn\s*$", "", headline, flags=re.IGNORECASE).strip()
 
     location = None
     loc_match = re.search(
@@ -221,7 +211,7 @@ def parse_linkedin_result(item: dict) -> LinkedInProfile | None:
     )
 
 
-def _parse_url_into_profile(url: str) -> LinkedInProfile | None:
+def _parse_url_into_profile(url: str, snippet: str = "") -> LinkedInProfile | None:
     """Extract name from a LinkedIn profile URL as fallback."""
     if "linkedin.com/in/" not in url:
         return None
@@ -230,13 +220,14 @@ def _parse_url_into_profile(url: str) -> LinkedInProfile | None:
     slug = clean_url.rstrip("/").split("/")[-1]
     name = slug.replace("-", " ").title()
     name = re.sub(r"\s+\d+$", "", name)
+    name = re.sub(r"\s+[a-f0-9]{6,}$", "", name, flags=re.IGNORECASE)
 
     return LinkedInProfile(
         name=name,
         headline=None,
         location=None,
         linkedin_url=clean_url,
-        snippet=None,
+        snippet=snippet.strip() if snippet else None,
     )
 
 
@@ -248,7 +239,7 @@ async def search_linkedin_profiles(
     seniority: str | None = None,
     max_results: int = 20,
 ) -> tuple[list[LinkedInProfile], str]:
-    """Search for LinkedIn profiles using Playwright + Google."""
+    """Search for LinkedIn profiles using Playwright + DuckDuckGo."""
     rate_error = _check_rate_limit()
     if rate_error:
         raise Exception(rate_error)
@@ -264,7 +255,7 @@ async def search_linkedin_profiles(
             break
 
         remaining = max_results - len(profiles)
-        items = await loop.run_in_executor(_executor, _search_google_sync, sq, remaining)
+        items = await loop.run_in_executor(_executor, _search_duckduckgo_sync, sq, remaining)
 
         for item in items:
             profile = parse_linkedin_result(item)

@@ -104,6 +104,18 @@ def _search_duckduckgo_sync(query: str, max_results: int = 20) -> list[dict]:
             page.goto(url, wait_until="domcontentloaded")
             time.sleep(random.uniform(2.0, 3.5))
 
+            # Scroll and click "More Results" to load additional results
+            for _ in range(3):
+                page.keyboard.press("End")
+                time.sleep(1.0)
+                try:
+                    more_btn = page.locator("button:has-text('More results'), button:has-text('More Results'), a:has-text('More results')")
+                    if more_btn.count() > 0:
+                        more_btn.first.click()
+                        time.sleep(random.uniform(1.5, 2.5))
+                except Exception:
+                    pass
+
             # DuckDuckGo result extraction
             result_links = page.locator("a[href*='linkedin.com/in/']")
             count = result_links.count()
@@ -237,6 +249,7 @@ async def search_linkedin_profiles(
     location: str | None = None,
     companies: list[str] | None = None,
     seniority: str | None = None,
+    alternative_terms: list[str] | None = None,
     max_results: int = 20,
 ) -> tuple[list[LinkedInProfile], str]:
     """Search for LinkedIn profiles using Playwright + DuckDuckGo."""
@@ -244,7 +257,11 @@ async def search_linkedin_profiles(
     if rate_error:
         raise Exception(rate_error)
 
+    # Build queries for main terms + alternatives
     search_queries = build_search_queries(query, location, companies, seniority)
+    if alternative_terms:
+        for alt in alternative_terms[:2]:
+            search_queries.extend(build_search_queries(alt, location, companies, seniority))
 
     profiles: list[LinkedInProfile] = []
     seen_urls: set[str] = set()
@@ -264,6 +281,6 @@ async def search_linkedin_profiles(
                 profiles.append(profile)
 
         if len(search_queries) > 1:
-            await asyncio.sleep(random.uniform(2.0, 5.0))
+            await asyncio.sleep(random.uniform(1.5, 3.0))
 
     return profiles[:max_results], search_queries[0]

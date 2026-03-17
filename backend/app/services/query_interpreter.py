@@ -54,6 +54,7 @@ async def interpret_query(query: str, api_key: str) -> SearchQuery:
             location=parsed.get("location"),
             companies=parsed.get("companies"),
             seniority=parsed.get("seniority"),
+            alternative_terms=parsed.get("alternative_terms", []),
         )
 
     except Exception as e:

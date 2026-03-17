@@ -16,6 +16,7 @@ class SearchQuery(BaseModel):
     location: str | None = None
     companies: list[str] | None = None
     seniority: str | None = None
+    alternative_terms: list[str] | None = None
     max_results: int = 20
 
 

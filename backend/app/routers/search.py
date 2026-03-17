@@ -34,6 +34,7 @@ async def find_people(
             location=interpreted.location or body.location,
             companies=interpreted.companies or body.companies,
             seniority=interpreted.seniority or body.seniority,
+            alternative_terms=interpreted.alternative_terms,
             max_results=interpreted.max_results,
         )
 

@@ -44,3 +44,4 @@ class SaveContactRequest(BaseModel):
     relevance_reason: str | None = None
     status: ContactStatus = ContactStatus.DISCOVERED
     notes: str | None = None
+    domain: str | None = None

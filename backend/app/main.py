@@ -27,7 +27,7 @@ app.include_router(search.router)
 async def health():
     return {
         "status": "ok",
-        "google_configured": bool(settings.google_api_key),
+        "search_configured": True,
         "notion_configured": bool(settings.notion_api_key),
         "openai_configured": bool(settings.openai_api_key),
     }

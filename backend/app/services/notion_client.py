@@ -25,64 +25,51 @@ async def save_contact_to_notion(
     contact: SaveContactRequest,
     property_mapping: dict | None = None,
 ) -> dict:
-    """Save a contact to the Notion database.
+    """Save a contact to the existing 'People contacted' Notion database.
 
-    property_mapping maps our field names to the actual Notion property names.
-    If not provided, uses sensible defaults.
+    Database columns:
+      Name (title), Role (rich_text), Company (rich_text),
+      Select (select: HEOR, RWE, etc.), Status (status),
+      Notes (rich_text), Email (email),
+      First-Contact Date (date), Interview/questions Date (date),
+      Last contacted (date), Follow-Up Date (date),
+      Company Type (select: Biotech, Biopharmaceutic, etc.)
     """
     client = AsyncClient(auth=api_key)
 
-    mapping = property_mapping or {
-        "name": "Name",
-        "headline": "Title/Role",
-        "location": "Location",
-        "linkedin_url": "LinkedIn URL",
-        "status": "Status",
-        "relevance_score": "Relevance Score",
-        "notes": "Notes",
-    }
-
     properties: dict = {}
 
-    if mapping.get("name"):
-        properties[mapping["name"]] = {
-            "title": [{"text": {"content": contact.name}}]
-        }
+    # Name (title)
+    properties["Name"] = {
+        "title": [{"text": {"content": contact.name}}]
+    }
 
-    if contact.headline and mapping.get("headline"):
-        properties[mapping["headline"]] = {
+    # Role (rich_text) - from headline
+    if contact.headline:
+        properties["Role"] = {
             "rich_text": [{"text": {"content": contact.headline}}]
         }
 
-    if contact.location and mapping.get("location"):
-        properties[mapping["location"]] = {
-            "rich_text": [{"text": {"content": contact.location}}]
-        }
-
-    if contact.linkedin_url and mapping.get("linkedin_url"):
-        properties[mapping["linkedin_url"]] = {
-            "url": contact.linkedin_url
-        }
-
-    if contact.status and mapping.get("status"):
-        properties[mapping["status"]] = {
-            "select": {"name": contact.status.value}
-        }
-
-    if contact.relevance_score is not None and mapping.get("relevance_score"):
-        properties[mapping["relevance_score"]] = {
-            "number": contact.relevance_score
-        }
-
-    notes_content = ""
+    # Notes (rich_text) - combine LinkedIn URL + AI reason + user notes
+    notes_parts = []
+    if contact.linkedin_url:
+        notes_parts.append(f"LinkedIn: {contact.linkedin_url}")
+    if contact.relevance_score is not None:
+        notes_parts.append(f"Relevance: {contact.relevance_score}/100")
     if contact.relevance_reason:
-        notes_content += f"AI Assessment: {contact.relevance_reason}\n"
+        notes_parts.append(f"AI Assessment: {contact.relevance_reason}")
     if contact.notes:
-        notes_content += contact.notes
+        notes_parts.append(contact.notes)
 
-    if notes_content and mapping.get("notes"):
-        properties[mapping["notes"]] = {
-            "rich_text": [{"text": {"content": notes_content.strip()}}]
+    if notes_parts:
+        properties["Notes"] = {
+            "rich_text": [{"text": {"content": "\n".join(notes_parts)}}]
+        }
+
+    # Select (select) - field/domain like HEOR, RWE, etc.
+    if contact.domain:
+        properties["Select"] = {
+            "select": {"name": contact.domain}
         }
 
     page = await client.pages.create(
@@ -120,8 +107,16 @@ async def get_saved_contacts(
             elif ptype == "select":
                 sel = prop_value.get("select")
                 contact[prop_name] = sel.get("name", "") if sel else ""
+            elif ptype == "status":
+                sel = prop_value.get("status")
+                contact[prop_name] = sel.get("name", "") if sel else ""
             elif ptype == "number":
                 contact[prop_name] = prop_value.get("number")
+            elif ptype == "email":
+                contact[prop_name] = prop_value.get("email", "")
+            elif ptype == "date":
+                d = prop_value.get("date")
+                contact[prop_name] = d.get("start", "") if d else ""
 
         contacts.append(contact)
 

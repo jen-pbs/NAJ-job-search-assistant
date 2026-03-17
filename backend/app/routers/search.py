@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.config import Settings, get_settings
 from app.models.schemas import SearchQuery, SearchResponse, SaveContactRequest
-from app.services.google_search import search_linkedin_profiles
+from app.services.web_search import search_linkedin_profiles
 from app.services.ai_scorer import score_profiles
 from app.services.query_interpreter import interpret_query
 from app.services.notion_client import (
@@ -20,12 +20,6 @@ async def find_people(
     settings: Settings = Depends(get_settings),
 ):
     """Find LinkedIn profiles matching the search criteria."""
-    if not settings.google_api_key or not settings.google_cse_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Google API key and Custom Search Engine ID are required. "
-            "See /api/search/setup-guide for instructions.",
-        )
 
     interpreted = body
     if settings.openai_api_key:
@@ -34,8 +28,6 @@ async def find_people(
 
     profiles, query_used = await search_linkedin_profiles(
         query=interpreted.query,
-        api_key=settings.google_api_key,
-        cse_id=settings.google_cse_id,
         location=interpreted.location or body.location,
         companies=interpreted.companies or body.companies,
         seniority=interpreted.seniority or body.seniority,
@@ -81,10 +73,7 @@ async def save_contact(
 async def notion_schema(settings: Settings = Depends(get_settings)):
     """Get the schema of the connected Notion database."""
     if not settings.notion_api_key:
-        raise HTTPException(
-            status_code=400,
-            detail="Notion API key is required.",
-        )
+        raise HTTPException(status_code=400, detail="Notion API key is required.")
 
     try:
         schema = await get_database_schema(
@@ -116,20 +105,15 @@ async def list_saved_contacts(settings: Settings = Depends(get_settings)):
 async def setup_guide():
     """Return setup instructions for required API keys."""
     return {
-        "google_custom_search": {
-            "description": "Required for LinkedIn profile discovery via Google dorking",
+        "brave_search": {
+            "description": "Required for LinkedIn profile discovery",
             "steps": [
-                "1. Go to https://console.cloud.google.com/",
-                "2. Create a new project (or use existing)",
-                "3. Enable the 'Custom Search API'",
-                "4. Go to Credentials > Create Credentials > API Key",
-                "5. Copy the API key to .env as GOOGLE_API_KEY",
-                "6. Go to https://programmablesearchengine.google.com/",
-                "7. Create a new search engine",
-                "8. Set 'Search the entire web' to ON",
-                "9. Copy the Search Engine ID to .env as GOOGLE_CSE_ID",
+                "1. Go to https://api-dashboard.search.brave.com/",
+                "2. Sign up for a free account (no credit card needed)",
+                "3. Subscribe to the Free plan (2000 queries/month)",
+                "4. Copy your API key to .env as BRAVE_API_KEY",
             ],
-            "free_tier": "100 queries/day free",
+            "free_tier": "2000 queries/month",
         },
         "notion": {
             "description": "Required for saving contacts to your existing database",

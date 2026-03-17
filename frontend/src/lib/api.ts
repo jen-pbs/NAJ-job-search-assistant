@@ -37,7 +37,7 @@ export interface SaveContactRequest {
 
 export interface HealthStatus {
   status: string;
-  google_configured: boolean;
+  search_configured: boolean;
   notion_configured: boolean;
   openai_configured: boolean;
 }

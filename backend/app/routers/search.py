@@ -20,30 +20,39 @@ async def find_people(
     settings: Settings = Depends(get_settings),
 ):
     """Find LinkedIn profiles matching the search criteria."""
+    try:
+        interpreted = body
+        if settings.groq_api_key:
+            try:
+                interpreted = await interpret_query(body.query, settings.groq_api_key)
+                interpreted.max_results = body.max_results
+            except Exception as e:
+                print(f"Query interpretation failed, using raw query: {e}")
 
-    interpreted = body
-    if settings.groq_api_key:
-        interpreted = await interpret_query(body.query, settings.groq_api_key)
-        interpreted.max_results = body.max_results
-
-    profiles, query_used = await search_linkedin_profiles(
-        query=interpreted.query,
-        location=interpreted.location or body.location,
-        companies=interpreted.companies or body.companies,
-        seniority=interpreted.seniority or body.seniority,
-        max_results=interpreted.max_results,
-    )
-
-    if settings.groq_api_key and profiles:
-        profiles = await score_profiles(
-            profiles, body.query, settings.groq_api_key
+        profiles, query_used = await search_linkedin_profiles(
+            query=interpreted.query,
+            location=interpreted.location or body.location,
+            companies=interpreted.companies or body.companies,
+            seniority=interpreted.seniority or body.seniority,
+            max_results=interpreted.max_results,
         )
 
-    return SearchResponse(
-        query_used=query_used,
-        profiles=profiles,
-        total_found=len(profiles),
-    )
+        if settings.groq_api_key and profiles:
+            try:
+                profiles = await score_profiles(
+                    profiles, body.query, settings.groq_api_key
+                )
+            except Exception as e:
+                print(f"AI scoring failed, returning unscored results: {e}")
+
+        return SearchResponse(
+            query_used=query_used,
+            profiles=profiles,
+            total_found=len(profiles),
+        )
+    except Exception as e:
+        print(f"Search endpoint error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/save-contact")

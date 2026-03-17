@@ -1,13 +1,42 @@
 import asyncio
 import random
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
+from collections import deque
 
 from playwright.sync_api import sync_playwright
 
 from app.models.schemas import LinkedInProfile
 
 _executor = ThreadPoolExecutor(max_workers=2)
+
+# Rate limiter: max 10 searches per hour
+_search_timestamps: deque[float] = deque()
+MAX_SEARCHES_PER_HOUR = 10
+
+STEALTH_JS = """
+Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+window.chrome = {runtime: {}};
+"""
+
+
+def _check_rate_limit() -> str | None:
+    """Returns error message if rate limited, None if OK."""
+    now = time.time()
+    # Remove timestamps older than 1 hour
+    while _search_timestamps and _search_timestamps[0] < now - 3600:
+        _search_timestamps.popleft()
+
+    if len(_search_timestamps) >= MAX_SEARCHES_PER_HOUR:
+        oldest = _search_timestamps[0]
+        wait_minutes = int((oldest + 3600 - now) / 60) + 1
+        return f"Rate limit reached ({MAX_SEARCHES_PER_HOUR} searches/hour). Try again in ~{wait_minutes} minutes."
+
+    _search_timestamps.append(now)
+    return None
 
 
 def build_search_queries(
@@ -46,11 +75,18 @@ def build_search_queries(
 
 
 def _search_google_sync(query: str, max_results: int = 20) -> list[dict]:
-    """Search Google using a headless browser (sync, runs in thread pool)."""
+    """Search Google using the user's installed Chrome with stealth measures."""
     results = []
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(
+            headless=True,
+            channel="chrome",
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+            ],
+        )
         context = browser.new_context(
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -58,16 +94,16 @@ def _search_google_sync(query: str, max_results: int = 20) -> list[dict]:
                 "Chrome/131.0.0.0 Safari/537.36"
             ),
             locale="en-US",
-            viewport={"width": 1280, "height": 800},
+            viewport={"width": 1366, "height": 768},
         )
         context.set_default_timeout(15000)
+        context.add_init_script(STEALTH_JS)
         page = context.new_page()
 
         try:
             url = "https://www.google.com/search?q=" + query.replace(" ", "+") + f"&num={min(max_results, 20)}&hl=en"
             page.goto(url, wait_until="domcontentloaded")
-            import time
-            time.sleep(random.uniform(1.5, 3.0))
+            time.sleep(random.uniform(2.0, 4.0))
 
             # Handle cookie consent
             try:
@@ -213,6 +249,10 @@ async def search_linkedin_profiles(
     max_results: int = 20,
 ) -> tuple[list[LinkedInProfile], str]:
     """Search for LinkedIn profiles using Playwright + Google."""
+    rate_error = _check_rate_limit()
+    if rate_error:
+        raise Exception(rate_error)
+
     search_queries = build_search_queries(query, location, companies, seniority)
 
     profiles: list[LinkedInProfile] = []

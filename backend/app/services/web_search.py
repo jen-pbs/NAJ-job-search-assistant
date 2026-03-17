@@ -1,10 +1,13 @@
 import asyncio
 import random
 import re
+from concurrent.futures import ThreadPoolExecutor
 
-from playwright.async_api import async_playwright
+from playwright.sync_api import sync_playwright
 
 from app.models.schemas import LinkedInProfile
+
+_executor = ThreadPoolExecutor(max_workers=2)
 
 
 def build_search_queries(
@@ -42,13 +45,13 @@ def build_search_queries(
     return queries
 
 
-async def _search_google_playwright(query: str, max_results: int = 20) -> list[dict]:
-    """Search Google using a headless browser. No API key needed."""
+def _search_google_sync(query: str, max_results: int = 20) -> list[dict]:
+    """Search Google using a headless browser (sync, runs in thread pool)."""
     results = []
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -57,50 +60,50 @@ async def _search_google_playwright(query: str, max_results: int = 20) -> list[d
             locale="en-US",
             viewport={"width": 1280, "height": 800},
         )
-        # Accept cookies automatically
         context.set_default_timeout(15000)
-        page = await context.new_page()
+        page = context.new_page()
 
         try:
-            await page.goto("https://www.google.com/search?q=" + query.replace(" ", "+") + f"&num={min(max_results, 20)}&hl=en", wait_until="domcontentloaded")
-            await asyncio.sleep(random.uniform(1.5, 3.0))
+            url = "https://www.google.com/search?q=" + query.replace(" ", "+") + f"&num={min(max_results, 20)}&hl=en"
+            page.goto(url, wait_until="domcontentloaded")
+            import time
+            time.sleep(random.uniform(1.5, 3.0))
 
-            # Handle cookie consent if it appears
+            # Handle cookie consent
             try:
                 accept_btn = page.locator("button:has-text('Accept all'), button:has-text('Accept'), button:has-text('I agree')")
-                if await accept_btn.count() > 0:
-                    await accept_btn.first.click()
-                    await asyncio.sleep(1)
+                if accept_btn.count() > 0:
+                    accept_btn.first.click()
+                    time.sleep(1)
             except Exception:
                 pass
 
             # Check for CAPTCHA
-            content = await page.content()
+            content = page.content()
             if "sorry" in content.lower() and "unusual traffic" in content.lower():
                 print("Google CAPTCHA detected. Try again later or reduce search frequency.")
-                await browser.close()
+                browser.close()
                 return []
 
             # Extract search results
             result_elements = page.locator("div.g")
-            count = await result_elements.count()
+            count = result_elements.count()
 
             for i in range(min(count, max_results)):
                 try:
                     el = result_elements.nth(i)
 
                     link_el = el.locator("a").first
-                    href = await link_el.get_attribute("href") or ""
+                    href = link_el.get_attribute("href") or ""
 
                     title_el = el.locator("h3").first
-                    title = await title_el.inner_text() if await title_el.count() > 0 else ""
+                    title = title_el.inner_text() if title_el.count() > 0 else ""
 
-                    # Get snippet from various possible selectors
                     snippet = ""
                     for sel in ["div[data-sncf]", "div.VwiC3b", "span.aCOpRe", "div[style='-webkit-line-clamp:2']"]:
                         snippet_el = el.locator(sel).first
-                        if await snippet_el.count() > 0:
-                            snippet = await snippet_el.inner_text()
+                        if snippet_el.count() > 0:
+                            snippet = snippet_el.inner_text()
                             break
 
                     if href:
@@ -112,15 +115,15 @@ async def _search_google_playwright(query: str, max_results: int = 20) -> list[d
                 except Exception:
                     continue
 
-            # If div.g didn't work, try broader extraction
+            # Fallback: extract LinkedIn links directly
             if not results:
                 all_links = page.locator("a[href*='linkedin.com/in/']")
-                link_count = await all_links.count()
+                link_count = all_links.count()
                 for i in range(min(link_count, max_results)):
                     try:
                         el = all_links.nth(i)
-                        href = await el.get_attribute("href") or ""
-                        text = await el.inner_text()
+                        href = el.get_attribute("href") or ""
+                        text = el.inner_text()
                         if "linkedin.com/in/" in href:
                             results.append({
                                 "link": href,
@@ -133,7 +136,7 @@ async def _search_google_playwright(query: str, max_results: int = 20) -> list[d
         except Exception as e:
             print(f"Playwright search error: {e}")
         finally:
-            await browser.close()
+            browser.close()
 
     return results
 
@@ -209,18 +212,19 @@ async def search_linkedin_profiles(
     seniority: str | None = None,
     max_results: int = 20,
 ) -> tuple[list[LinkedInProfile], str]:
-    """Search for LinkedIn profiles using Playwright + Google. No API key needed."""
+    """Search for LinkedIn profiles using Playwright + Google."""
     search_queries = build_search_queries(query, location, companies, seniority)
 
     profiles: list[LinkedInProfile] = []
     seen_urls: set[str] = set()
+    loop = asyncio.get_event_loop()
 
     for sq in search_queries:
         if len(profiles) >= max_results:
             break
 
         remaining = max_results - len(profiles)
-        items = await _search_google_playwright(sq, max_results=remaining)
+        items = await loop.run_in_executor(_executor, _search_google_sync, sq, remaining)
 
         for item in items:
             profile = parse_linkedin_result(item)
@@ -228,7 +232,6 @@ async def search_linkedin_profiles(
                 seen_urls.add(profile.linkedin_url)
                 profiles.append(profile)
 
-        # Random delay between queries to be polite
         if len(search_queries) > 1:
             await asyncio.sleep(random.uniform(2.0, 5.0))
 

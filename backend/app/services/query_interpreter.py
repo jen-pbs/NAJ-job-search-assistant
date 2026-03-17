@@ -45,8 +45,12 @@ async def interpret_query(query: str, api_key: str) -> SearchQuery:
         content = response.choices[0].message.content or "{}"
         parsed = json.loads(content)
 
+        search_terms = parsed.get("search_terms", query)
+        if isinstance(search_terms, list):
+            search_terms = " ".join(search_terms)
+
         return SearchQuery(
-            query=parsed.get("search_terms", query),
+            query=str(search_terms),
             location=parsed.get("location"),
             companies=parsed.get("companies"),
             seniority=parsed.get("seniority"),

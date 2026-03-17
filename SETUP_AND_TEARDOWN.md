@@ -7,11 +7,11 @@ When you no longer need the tool, follow the teardown steps to clean up.
 
 ## Accounts & Services Created
 
-### 1. Brave Search API
-- **Dashboard:** https://api-dashboard.search.brave.com/
-- **Plan:** Free (2000 queries/month)
+### 1. Groq (AI scoring - FREE)
+- **Console:** https://console.groq.com/
+- **Plan:** Free (30 req/min, 1000 req/day, no expiration)
 - **Credit card required:** No
-- **API key location:** backend/.env as BRAVE_API_KEY
+- **API key location:** backend/.env as GROQ_API_KEY
 
 ### 2. Notion Integration
 - **Integration name:** My Assis sync
@@ -19,17 +19,18 @@ When you no longer need the tool, follow the teardown steps to clean up.
 - **Connected to page:** Informational interviews CA
 - **Database used:** "People contacted" (inline database)
 
-### 3. OpenAI (optional, not set up yet)
-- **Status:** Not configured
-- **Would be used for:** AI query interpretation and relevance scoring
-- **Sign up at:** https://platform.openai.com/
-
-### 4. Google Cloud Platform (TO BE DEACTIVATED)
+### 3. Google Cloud Platform (TO BE DEACTIVATED)
 - **Project name:** Job-search-assistant
 - **Project ID:** job-search-assistant-490519
 - **Status:** API was deprecated by Google, no longer needed
 - **Billing account linked:** YES (credit card on file)
 - **ACTION REQUIRED:** Follow teardown steps below to remove billing
+
+### 4. Google Gemini API Keys (TO BE DELETED)
+- **Key 1:** "Default Gemini API Key" (project 664940699139) - quota was 0
+- **Key 2:** "network API Key" (project 239097741989) - quota was 0
+- **Managed at:** https://aistudio.google.com/apikey
+- **ACTION REQUIRED:** Delete both keys
 
 ---
 
@@ -37,7 +38,7 @@ When you no longer need the tool, follow the teardown steps to clean up.
 
 | File | Contains | Gitignored? |
 |------|----------|-------------|
-| `backend/.env` | Notion API key, Brave API key | YES |
+| `backend/.env` | Notion API key, Groq API key | YES |
 | `frontend/.env.local` | Only localhost URL (no secrets) | YES |
 
 ---
@@ -46,9 +47,11 @@ When you no longer need the tool, follow the teardown steps to clean up.
 
 | Service | Free Tier | Risk of charges |
 |---------|-----------|-----------------|
-| Brave Search API | 2000 queries/month free | None on free plan |
+| Playwright search | No API (free forever) | None |
+| Groq API | 1000 req/day free | None - hard capped, no billing |
 | Notion API | Unlimited (free plan) | None |
-| OpenAI (if added) | No free tier | Pay-per-use. gpt-4o-mini ~$0.15/1M tokens. Expect <$1/month. |
+
+**Total monthly cost: $0**
 
 ---
 
@@ -61,22 +64,23 @@ When you no longer need the tool, follow the teardown steps to clean up.
 - [ ] (Optional) Delete project: https://console.cloud.google.com/iam-admin/settings?project=job-search-assistant-490519 > "Shut down"
 - [ ] (Optional) Close billing account entirely to remove credit card
 
-### Step 2: Delete Programmable Search Engine
+### Step 2: Delete Gemini API Keys
+- [ ] Go to https://aistudio.google.com/apikey
+- [ ] Delete "Default Gemini API Key" (project 664940699139)
+- [ ] Delete "network API Key" (project 239097741989)
+
+### Step 3: Delete Programmable Search Engine
 - [ ] Go to https://programmablesearchengine.google.com/
 - [ ] Delete the search engine you created
 
-### Step 3: Brave Search API
-- [ ] Go to https://api-dashboard.search.brave.com/
-- [ ] Delete your API key or close your account
+### Step 4: Revoke Groq API key
+- [ ] Go to https://console.groq.com/ > API Keys
+- [ ] Delete or revoke your API key
 
-### Step 4: Revoke Notion integration
+### Step 5: Revoke Notion integration
 - [ ] Go to https://www.notion.so/my-integrations
 - [ ] Delete "My Assis sync" integration
 - [ ] In Notion, open the Informational Interviews page > "..." > Connections > Remove the integration
-
-### Step 5: Revoke OpenAI key (if created)
-- [ ] Go to https://platform.openai.com/api-keys
-- [ ] Delete the API key
 
 ### Step 6: Clean up local files
 - [ ] Delete `backend/.env` (contains all your secrets)

@@ -29,7 +29,7 @@ export default function StatusBanner() {
   const missing: string[] = [];
   if (!health.search_configured) missing.push("Search Engine");
   if (!health.notion_configured) missing.push("Notion API");
-  if (!health.ai_configured) missing.push("Groq API (optional, for AI scoring)");
+  if (!health.ai_configured) missing.push("Gemini API (optional, for AI scoring)");
 
   if (missing.length === 0) return null;
 

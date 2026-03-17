@@ -22,8 +22,8 @@ async def find_people(
     """Find LinkedIn profiles matching the search criteria."""
 
     interpreted = body
-    if settings.groq_api_key:
-        interpreted = await interpret_query(body.query, settings.groq_api_key)
+    if settings.gemini_api_key:
+        interpreted = await interpret_query(body.query, settings.gemini_api_key)
         interpreted.max_results = body.max_results
 
     profiles, query_used = await search_linkedin_profiles(
@@ -34,9 +34,9 @@ async def find_people(
         max_results=interpreted.max_results,
     )
 
-    if settings.groq_api_key and profiles:
+    if settings.gemini_api_key and profiles:
         profiles = await score_profiles(
-            profiles, body.query, settings.groq_api_key
+            profiles, body.query, settings.gemini_api_key
         )
 
     return SearchResponse(
@@ -124,15 +124,14 @@ async def setup_guide():
                 "6. Click '...' menu > 'Connections' > Add your integration",
             ],
         },
-        "groq": {
+        "gemini": {
             "description": "Optional (free) - enables AI query interpretation and relevance scoring",
             "steps": [
-                "1. Go to https://console.groq.com/",
-                "2. Sign up (free, no credit card)",
-                "3. Go to API Keys > Create API Key",
-                "4. Copy to .env as GROQ_API_KEY",
+                "1. Go to https://aistudio.google.com/apikey",
+                "2. Click 'Create API key'",
+                "3. Copy to .env as GEMINI_API_KEY",
             ],
-            "free_tier": "30 requests/minute, free forever",
+            "free_tier": "15 requests/minute, free forever",
             "note": "The app works without this, but search results won't be scored or ranked",
         },
     }

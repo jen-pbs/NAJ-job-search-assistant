@@ -169,7 +169,7 @@ export default function Home() {
               Welcome to <span className="text-indigo-600">NAJ Search</span>
             </h1>
             <p className="text-sm text-slate-400 mb-6">
-              Network &amp; Job Assistant
+              Your Network and Job Search Assistant
             </p>
             <p className="text-sm text-slate-600 mb-4">What&apos;s your name?</p>
             <form
@@ -212,7 +212,7 @@ export default function Home() {
               </div>
               <div>
                 <h1 className="text-lg font-semibold text-slate-900 tracking-tight">
-                  Hi, {userName} <span className="text-slate-300 font-normal">|</span> NAJ <span className="text-indigo-600">Search</span>
+                  NAJ <span className="text-indigo-600">Search</span>
                 </h1>
                 <p className="text-[10px] text-slate-400 -mt-0.5 tracking-wide uppercase">
                   Network &amp; Job Assistant
@@ -245,6 +245,9 @@ export default function Home() {
       {/* Content */}
       <div className="max-w-5xl mx-auto px-6 pt-10 pb-6 relative z-[1]">
         <div className="text-center mb-8">
+          <p className="text-sm text-indigo-500 font-medium mb-1">
+            Hi, {userName}
+          </p>
           <h2 className="text-2xl font-semibold text-slate-800 mb-2">
             {current.title}
           </h2>

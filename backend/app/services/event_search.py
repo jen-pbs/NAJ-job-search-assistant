@@ -126,12 +126,27 @@ def _search_events_sync(query: str, location: str | None, max_results: int = 15)
                         if not href or "duckduckgo.com" in href or href in seen_urls:
                             continue
 
-                        # Skip non-event results and generic listing pages
+                        # Skip non-event results and generic listing/homepage URLs
                         if "linkedin.com" in href:
                             continue
-                        if re.search(r"eventbrite\.com/[db]/", href):
+                        # Eventbrite listing pages (/d/, /b/, /cc/, homepage)
+                        if re.search(r"eventbrite\.com/([db]/|cc/|o/|$)", href):
                             continue
-                        if href.rstrip("/") in ("https://www.eventbrite.com", "https://www.meetup.com"):
+                        # Generic homepages and directory pages
+                        skip_patterns = [
+                            r"^https?://(?:www\.)?meetup\.com/?$",
+                            r"^https?://(?:www\.)?meetup\.com/find/",
+                            r"^https?://(?:www\.)?meetup\.com/topics/",
+                            r"^https?://(?:www\.)?eventbrite\.com/?$",
+                            r"^https?://(?:www\.)?lu\.ma/?$",
+                            r"^https?://(?:www\.)?\w+\.com/?$",
+                            r"^https?://(?:www\.)?\w+\.org/?$",
+                            r"/discover[/-]",
+                            r"/search[?/]",
+                            r"/category/",
+                            r"/topics?/",
+                        ]
+                        if any(re.search(pat, href) for pat in skip_patterns):
                             continue
 
                         clean_url = re.sub(r"\?.*$", "", href)

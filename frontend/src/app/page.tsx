@@ -1,6 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import dynamic from "next/dynamic";
+
+const DotLottieReact = dynamic(
+  () => import("@lottiefiles/dotlottie-react").then((m) => m.DotLottieReact),
+  { ssr: false },
+);
 import SearchBar from "@/components/SearchBar";
 import ProfileCard from "@/components/ProfileCard";
 import EventCard from "@/components/EventCard";
@@ -38,8 +44,6 @@ const LOADING_MESSAGES = [
 
 function SearchLoadingAnimation({ query, type = "people" }: { query?: string; type?: "people" | "events" }) {
   const [msgIndex, setMsgIndex] = useState(0);
-  const [tailSwish, setTailSwish] = useState(false);
-  const [blink, setBlink] = useState(false);
   const [dots, setDots] = useState("");
 
   useEffect(() => {
@@ -51,19 +55,6 @@ function SearchLoadingAnimation({ query, type = "people" }: { query?: string; ty
       setMsgIndex((prev) => (prev + 1) % LOADING_MESSAGES.length);
     }, 6000);
     return () => clearInterval(msgTimer);
-  }, []);
-
-  useEffect(() => {
-    const swishTimer = setInterval(() => setTailSwish((p) => !p), 600);
-    return () => clearInterval(swishTimer);
-  }, []);
-
-  useEffect(() => {
-    const blinkTimer = setInterval(() => {
-      setBlink(true);
-      setTimeout(() => setBlink(false), 200);
-    }, 3000);
-    return () => clearInterval(blinkTimer);
   }, []);
 
   useEffect(() => {
@@ -101,84 +92,14 @@ function SearchLoadingAnimation({ query, type = "people" }: { query?: string; ty
 
   return (
     <div className="mt-16 flex flex-col items-center gap-6">
-      {/* Cat character */}
-      <div className="relative">
-        <svg width="100" height="110" viewBox="0 0 120 130" fill="none" xmlns="http://www.w3.org/2000/svg">
-          {/* Tail - lazy swish */}
-          <path
-            d={tailSwish
-              ? "M92 82 Q110 70 115 58 Q118 50 112 48"
-              : "M92 82 Q108 74 110 62 Q112 54 106 55"
-            }
-            stroke="#1e1e1e" strokeWidth="3" strokeLinecap="round"
-            style={{ transition: "d 0.5s ease-in-out" }}
-          />
-
-          {/* Body - sitting loaf shape */}
-          <ellipse cx="60" cy="88" rx="30" ry="22" stroke="#1e1e1e" strokeWidth="2.5" />
-          {/* Chest fluff */}
-          <path d="M48 75 Q52 70 56 75 Q60 70 64 75 Q68 70 72 75" stroke="#1e1e1e" strokeWidth="1.5" strokeLinecap="round" />
-
-          {/* Head */}
-          <ellipse cx="60" cy="48" rx="22" ry="20" stroke="#1e1e1e" strokeWidth="2.5" />
-
-          {/* Left ear - pointy */}
-          <path d="M40 38 L32 14 L48 32" stroke="#1e1e1e" strokeWidth="2.5" strokeLinejoin="round" />
-          {/* Left ear inner */}
-          <path d="M39 34 L35 20 L45 32" stroke="#1e1e1e" strokeWidth="1" />
-          {/* Right ear - pointy */}
-          <path d="M80 38 L88 14 L72 32" stroke="#1e1e1e" strokeWidth="2.5" strokeLinejoin="round" />
-          {/* Right ear inner */}
-          <path d="M81 34 L85 20 L75 32" stroke="#1e1e1e" strokeWidth="1" />
-
-          {/* Eyes - half-lidded and judgy */}
-          {blink ? (
-            <>
-              <line x1="48" y1="46" x2="56" y2="46" stroke="#1e1e1e" strokeWidth="2" strokeLinecap="round" />
-              <line x1="64" y1="46" x2="72" y2="46" stroke="#1e1e1e" strokeWidth="2" strokeLinecap="round" />
-            </>
-          ) : (
-            <>
-              {/* Left eye */}
-              <ellipse cx="52" cy="46" rx="5" ry="4" stroke="#1e1e1e" strokeWidth="2" />
-              <ellipse cx="52" cy="46" rx="2.5" ry="3" fill="#1e1e1e" />
-              <circle cx="53.5" cy="44.5" r="1" fill="white" />
-              {/* Half-lid (aloof look) */}
-              <path d="M47 43 Q52 41 57 43" stroke="#1e1e1e" strokeWidth="2" strokeLinecap="round" />
-              {/* Right eye */}
-              <ellipse cx="68" cy="46" rx="5" ry="4" stroke="#1e1e1e" strokeWidth="2" />
-              <ellipse cx="68" cy="46" rx="2.5" ry="3" fill="#1e1e1e" />
-              <circle cx="69.5" cy="44.5" r="1" fill="white" />
-              {/* Half-lid */}
-              <path d="M63 43 Q68 41 73 43" stroke="#1e1e1e" strokeWidth="2" strokeLinecap="round" />
-            </>
-          )}
-
-          {/* Nose - triangle */}
-          <path d="M58 53 L60 56 L62 53 Z" fill="#1e1e1e" />
-
-          {/* Mouth - tiny unimpressed line */}
-          <path d="M56 57 Q58 58 60 57 Q62 58 64 57" stroke="#1e1e1e" strokeWidth="1.5" strokeLinecap="round" />
-
-          {/* Whiskers - left */}
-          <line x1="44" y1="52" x2="28" y2="49" stroke="#1e1e1e" strokeWidth="1.2" strokeLinecap="round" />
-          <line x1="44" y1="54" x2="28" y2="55" stroke="#1e1e1e" strokeWidth="1.2" strokeLinecap="round" />
-          <line x1="44" y1="56" x2="30" y2="60" stroke="#1e1e1e" strokeWidth="1.2" strokeLinecap="round" />
-          {/* Whiskers - right */}
-          <line x1="76" y1="52" x2="92" y2="49" stroke="#1e1e1e" strokeWidth="1.2" strokeLinecap="round" />
-          <line x1="76" y1="54" x2="92" y2="55" stroke="#1e1e1e" strokeWidth="1.2" strokeLinecap="round" />
-          <line x1="76" y1="56" x2="90" y2="60" stroke="#1e1e1e" strokeWidth="1.2" strokeLinecap="round" />
-
-          {/* Front paws - tucked under */}
-          <ellipse cx="46" cy="106" rx="8" ry="5" stroke="#1e1e1e" strokeWidth="2" />
-          <ellipse cx="74" cy="106" rx="8" ry="5" stroke="#1e1e1e" strokeWidth="2" />
-          {/* Toe lines */}
-          <path d="M42 106 L42 109 M45 106 L45 109 M48 106 L48 109" stroke="#1e1e1e" strokeWidth="1" strokeLinecap="round" />
-          <path d="M70 106 L70 109 M73 106 L73 109 M76 106 L76 109" stroke="#1e1e1e" strokeWidth="1" strokeLinecap="round" />
-        </svg>
-
-        {/* Shadow under the cat */}
-        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-16 h-2.5 bg-slate-200/50 rounded-full" />
+      {/* Lottie cat animation */}
+      <div className="w-32 h-32">
+        <DotLottieReact
+          src="https://assets-v2.lottiefiles.com/a/009fccf8-1171-11ee-b7df-93d19199ced4/AVVma18Z2T.lottie"
+          loop
+          autoplay
+          speed={0.8}
+        />
       </div>
 
       {/* Speech bubble */}

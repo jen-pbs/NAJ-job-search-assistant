@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import SearchBar from "@/components/SearchBar";
 import ProfileCard from "@/components/ProfileCard";
 import EventCard from "@/components/EventCard";
+import ChatPanel from "@/components/ChatPanel";
 import StatusBanner from "@/components/StatusBanner";
 import NetworkBackground from "@/components/NetworkBackground";
 import {
@@ -53,6 +54,7 @@ export default function Home() {
   const [peopleLoading, setPeopleLoading] = useState(false);
   const [peopleError, setPeopleError] = useState<string | null>(null);
   const [peopleQuery, setPeopleQuery] = useState<string | null>(null);
+  const [chatProfile, setChatProfile] = useState<LinkedInProfile | null>(null);
 
   // Events state
   const [events, setEvents] = useState<Event[]>([]);
@@ -308,7 +310,7 @@ export default function Home() {
             {profiles.length > 0 && (
               <div className="mt-4 space-y-3">
                 {profiles.map((profile, i) => (
-                  <ProfileCard key={profile.linkedin_url} profile={profile} index={i} />
+                  <ProfileCard key={profile.linkedin_url} profile={profile} index={i} onChat={setChatProfile} />
                 ))}
               </div>
             )}
@@ -400,6 +402,10 @@ export default function Home() {
           </>
         )}
       </div>
+
+      {chatProfile && (
+        <ChatPanel profile={chatProfile} onClose={() => setChatProfile(null)} />
+      )}
     </main>
   );
 }

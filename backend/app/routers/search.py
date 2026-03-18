@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.config import Settings, get_settings
 from app.models.schemas import SearchQuery, SearchResponse, SaveContactRequest
 from app.services.multi_search import search_linkedin_profiles_multi
+from app.services.academic_enricher import enrich_with_academic_data
 from app.services.ai_scorer import score_merged_profiles
 from app.services.query_interpreter import interpret_query
 from app.services.notion_client import (
@@ -40,6 +41,27 @@ async def find_people(
 
         profiles = []
         if merged_profiles:
+            # Enrich with academic data (Google Scholar + ORCID)
+            try:
+                names = [p.name for p in merged_profiles if p.name]
+                academic_data = await enrich_with_academic_data(names)
+                for mp in merged_profiles:
+                    key = mp.name.lower()
+                    if key in academic_data:
+                        ad = academic_data[key]
+                        if "scholar" in ad:
+                            mp.scholar_data = ad["scholar"]
+                            if "scholar" not in mp.sources:
+                                mp.sources.append("scholar")
+                        if "orcid" in ad:
+                            mp.orcid_data = ad["orcid"]
+                            if "orcid" not in mp.sources:
+                                mp.sources.append("orcid")
+                enriched_count = sum(1 for mp in merged_profiles if mp.scholar_data or mp.orcid_data)
+                print(f"Academic enrichment: {enriched_count}/{len(merged_profiles)} profiles")
+            except Exception as e:
+                print(f"Academic enrichment failed (continuing without): {e}")
+
             if settings.groq_api_key:
                 try:
                     profiles = await score_merged_profiles(

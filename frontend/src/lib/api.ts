@@ -106,6 +106,41 @@ export async function searchEvents(query: EventSearchQuery): Promise<EventSearch
   return res.json();
 }
 
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export async function sendChatMessage(
+  messages: ChatMessage[],
+  profileContext?: string,
+  onChunk?: (text: string) => void,
+): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/chat/message`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages, profile_context: profileContext }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: "Chat failed" }));
+    throw new Error(error.detail || "Chat failed");
+  }
+
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error("No response stream");
+
+  const decoder = new TextDecoder();
+  let full = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = decoder.decode(value, { stream: true });
+    full += chunk;
+    onChunk?.(full);
+  }
+  return full;
+}
+
 export async function saveContact(contact: SaveContactRequest): Promise<{ status: string; notion_page: { id: string; url: string } }> {
   const res = await fetch(`${API_BASE}/api/search/save-contact`, {
     method: "POST",

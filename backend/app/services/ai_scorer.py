@@ -74,10 +74,39 @@ def _build_profile_text_merged(i: int, profile: MergedProfile) -> str:
 
     # Add unique snippets from search engines
     for j, snippet in enumerate(profile.snippets[:3]):
-        # Skip if mostly duplicates of what we already have
         existing = "\n".join(lines)
         if snippet[:60] not in existing and "[LinkedIn]" not in snippet:
             lines.append(f"Search snippet: {snippet[:300]}")
+
+    # Google Scholar data
+    if profile.scholar_data:
+        sd = profile.scholar_data
+        if sd.get("publications"):
+            pub_titles = [p["title"] for p in sd["publications"][:3]]
+            lines.append(f"Google Scholar publications: {'; '.join(pub_titles)}")
+        if sd.get("citation_count"):
+            lines.append(f"Citation count: {sd['citation_count']}")
+        if sd.get("has_scholar_profile"):
+            lines.append("Has Google Scholar profile (active researcher)")
+
+    # ORCID data
+    if profile.orcid_data:
+        od = profile.orcid_data
+        if od.get("employment_history"):
+            jobs = od["employment_history"]
+            job_strs = [
+                f"{j.get('role', 'Role')} at {j['organization']} ({j.get('start_year', '?')}-{j.get('end_year', '?')})"
+                for j in jobs[:4]
+            ]
+            lines.append(f"ORCID career timeline: {' -> '.join(job_strs)}")
+        if od.get("education"):
+            edu_strs = [
+                f"{e.get('degree', '')} from {e['institution']}"
+                for e in od["education"][:3]
+            ]
+            lines.append(f"ORCID education: {'; '.join(edu_strs)}")
+        if od.get("works_count"):
+            lines.append(f"ORCID published works: {od['works_count']}")
 
     lines.append(f"(Data sources: {', '.join(profile.sources)})")
 

@@ -464,6 +464,18 @@ def _fetch_linkedin_public_pages(urls: list[str]) -> dict[str, dict]:
 # Parse and extract structured data from raw text
 # ---------------------------------------------------------------------------
 
+def _name_from_url_slug(url: str) -> str:
+    """Extract a human-readable name from a LinkedIn profile URL slug."""
+    slug = url.rstrip("/").split("/")[-1]
+    name = slug.replace("-", " ").title()
+    # Remove trailing IDs and hashes
+    name = re.sub(r"\s+\d+$", "", name)
+    name = re.sub(r"\s+[A-Fa-f0-9]{6,}[A-Za-z]?\s*$", "", name)
+    # Remove common LinkedIn URL suffixes
+    name = re.sub(r"\s+\d{4,}\s*$", "", name)
+    return name.strip()
+
+
 def _parse_name_from_title(title: str) -> str:
     """Extract the person's name from a search result title."""
     name = title.split(" - ")[0].strip() if " - " in title else title.split("|")[0].strip()
@@ -568,22 +580,27 @@ def _merge_results(
                 name = _parse_name_from_title(r.title)
                 headline = _parse_headline_from_title(r.title)
 
-                # If name looks like a job title rather than a person name, swap
-                job_words = {"director", "manager", "vp", "associate", "senior", "lead", "head", "chief", "president"}
-                if name and any(w in name.lower() for w in job_words) and len(name.split()) > 3:
-                    # Likely "Job Title" not a person name -- use URL slug instead
+                # If name looks like a job title/role rather than a person name, swap
+                job_words = {
+                    "director", "manager", "vp", "associate", "senior", "lead",
+                    "head", "chief", "president", "postdoc", "professor", "analyst",
+                    "consultant", "engineer", "scientist", "researcher", "intern",
+                    "coordinator", "specialist", "advisor", "fellow", "officer",
+                    "founder", "partner", "principal", "staff", "supervisor",
+                }
+                name_lower = name.lower() if name else ""
+                looks_like_title = (
+                    (any(w in name_lower for w in job_words) and len(name.split()) > 2)
+                    or "@" in name
+                    or name_lower.startswith("the ")
+                )
+                if name and looks_like_title:
                     if not headline:
                         headline = name
-                    slug = r.linkedin_url.rstrip("/").split("/")[-1]
-                    name = slug.replace("-", " ").title()
-                    name = re.sub(r"\s+\d+$", "", name)
-                    name = re.sub(r"\s+[A-Fa-f0-9]{6,}\s*$", "", name)
+                    name = _name_from_url_slug(r.linkedin_url)
 
                 if not name or name.startswith("http"):
-                    slug = r.linkedin_url.rstrip("/").split("/")[-1]
-                    name = slug.replace("-", " ").title()
-                    name = re.sub(r"\s+\d+$", "", name)
-                    name = re.sub(r"\s+[A-Fa-f0-9]{6,}\s*$", "", name)
+                    name = _name_from_url_slug(r.linkedin_url)
 
                 profiles_by_url[key] = MergedProfile(
                     linkedin_url=r.linkedin_url,
@@ -640,13 +657,20 @@ def _merge_results(
             page_info = _parse_public_page(public_pages[key])
             profile.public_page_data = page_info
 
-            # Use og:title for a cleaner name (e.g. "Samuel Crawford - Director, US HEOR")
+            # Use og:title for a cleaner name (e.g. "Samuel Crawford - Director, US HEOR | LinkedIn")
             og_title = page_info.get("og_title", "")
-            if og_title and " - " in og_title:
+            skip_titles = {"sign up", "sign in", "log in", "linkedin"}
+            if og_title and " - " in og_title and og_title.split(" - ")[0].strip().lower() not in skip_titles:
                 clean_name = og_title.split(" - ")[0].strip()
-                # Only use if it looks like a real name (2-4 words, no IDs)
+                # Only use if it looks like a real name (2-5 words, no IDs)
                 if clean_name and 1 < len(clean_name.split()) <= 5 and not re.search(r"[0-9]{3,}", clean_name):
                     profile.name = clean_name
+                    # Also extract headline from og_title if present
+                    og_parts = og_title.replace("| LinkedIn", "").split(" - ", 1)
+                    if len(og_parts) >= 2:
+                        og_headline = og_parts[1].strip()
+                        if og_headline and (not profile.headline or len(og_headline) > len(profile.headline)):
+                            profile.headline = og_headline
 
             if not profile.headline and page_info.get("headline_from_meta"):
                 profile.headline = page_info["headline_from_meta"]

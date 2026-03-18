@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import SearchBar from "@/components/SearchBar";
 import ProfileCard from "@/components/ProfileCard";
 import EventCard from "@/components/EventCard";
@@ -13,6 +13,99 @@ import {
   LinkedInProfile,
   Event,
 } from "@/lib/api";
+
+const LOADING_MESSAGES = [
+  { emoji: "🔍", text: "Searching across DuckDuckGo, Brave, Bing, and Google..." },
+  { emoji: "🕵️", text: "Sneaking into public LinkedIn pages (legally, I promise)..." },
+  { emoji: "📚", text: "Checking Google Scholar for publications..." },
+  { emoji: "🧬", text: "Looking up ORCID career timelines..." },
+  { emoji: "📰", text: "Scanning press releases and conference bios..." },
+  { emoji: "🤖", text: "AI is reading through all the profiles..." },
+  { emoji: "🎯", text: "Scoring relevance for each person..." },
+  { emoji: "🧠", text: "Fun fact: HEOR stands for Health Economics and Outcomes Research!" },
+  { emoji: "☕", text: "This is the part where you grab a coffee..." },
+  { emoji: "🎪", text: "Juggling 6 data sources at once... don't drop any..." },
+  { emoji: "🔮", text: "Consulting the crystal ball of career networking..." },
+  { emoji: "🏃", text: "Running faster than a recruiter sliding into DMs..." },
+  { emoji: "📊", text: "Cross-referencing data like a detective with a spreadsheet..." },
+  { emoji: "🎭", text: "Pretending to be a regular browser... nothing to see here..." },
+  { emoji: "🌐", text: "Visiting more websites than you do on a lazy Sunday..." },
+  { emoji: "🤓", text: "Reading academic papers so you don't have to..." },
+  { emoji: "🎲", text: "Rolling for initiative... nat 20! Extra profiles found!" },
+  { emoji: "🐕", text: "Fetching data... good bot, good bot..." },
+  { emoji: "🧩", text: "Piecing together professional histories like a puzzle..." },
+  { emoji: "🚀", text: "Almost there... just polishing the results..." },
+];
+
+function SearchLoadingAnimation() {
+  const [msgIndex, setMsgIndex] = useState(0);
+  const [dots, setDots] = useState("");
+
+  useEffect(() => {
+    // Start from a random message
+    setMsgIndex(Math.floor(Math.random() * LOADING_MESSAGES.length));
+  }, []);
+
+  useEffect(() => {
+    const msgTimer = setInterval(() => {
+      setMsgIndex((prev) => (prev + 1) % LOADING_MESSAGES.length);
+    }, 3500);
+    return () => clearInterval(msgTimer);
+  }, []);
+
+  useEffect(() => {
+    const dotTimer = setInterval(() => {
+      setDots((prev) => (prev.length >= 3 ? "" : prev + "."));
+    }, 500);
+    return () => clearInterval(dotTimer);
+  }, []);
+
+  const msg = LOADING_MESSAGES[msgIndex];
+
+  return (
+    <div className="mt-16 flex flex-col items-center gap-5">
+      {/* Animated character */}
+      <div className="relative">
+        <div className="text-6xl animate-bounce" style={{ animationDuration: "1.5s" }}>
+          {msg.emoji}
+        </div>
+        {/* Subtle shadow */}
+        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-10 h-2 bg-indigo-200/40 rounded-full animate-pulse" />
+      </div>
+
+      {/* Message bubble */}
+      <div className="bg-white border border-slate-200 rounded-2xl px-6 py-3 shadow-sm max-w-md relative">
+        <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white border-l border-t border-slate-200 rotate-45" />
+        <p className="text-sm text-slate-600 text-center relative z-10">
+          {msg.text}
+        </p>
+      </div>
+
+      {/* Progress bar */}
+      <div className="w-64 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+        <div
+          className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 rounded-full animate-loading-bar"
+          style={{
+            backgroundSize: "200% 100%",
+            animation: "loading-bar 2s ease-in-out infinite",
+          }}
+        />
+      </div>
+
+      <p className="text-xs text-slate-400">
+        Searching 6 sources in parallel{dots}
+      </p>
+
+      <style jsx>{`
+        @keyframes loading-bar {
+          0% { width: 5%; background-position: 0% 0%; }
+          50% { width: 70%; background-position: 100% 0%; }
+          100% { width: 5%; background-position: 0% 0%; }
+        }
+      `}</style>
+    </div>
+  );
+}
 
 type Tab = "networking" | "events" | "jobs";
 
@@ -315,15 +408,7 @@ export default function Home() {
               </div>
             )}
 
-            {peopleLoading && (
-              <div className="mt-16 flex flex-col items-center gap-4">
-                <div className="w-12 h-12 rounded-full border-2 border-indigo-100 border-t-indigo-500 animate-spin"></div>
-                <div className="text-center">
-                  <p className="text-sm font-medium text-slate-600">Searching &amp; evaluating profiles...</p>
-                  <p className="text-xs text-slate-400 mt-1">AI is analyzing each profile. This may take 30-60 seconds.</p>
-                </div>
-              </div>
-            )}
+            {peopleLoading && <SearchLoadingAnimation />}
 
             {!peopleLoading && profiles.length === 0 && !peopleError && !peopleQuery && (
               <div className="mt-20 text-center">
@@ -379,15 +464,7 @@ export default function Home() {
               </div>
             )}
 
-            {eventsLoading && (
-              <div className="mt-16 flex flex-col items-center gap-4">
-                <div className="w-12 h-12 rounded-full border-2 border-indigo-100 border-t-indigo-500 animate-spin"></div>
-                <div className="text-center">
-                  <p className="text-sm font-medium text-slate-600">Searching for events...</p>
-                  <p className="text-xs text-slate-400 mt-1">Checking Eventbrite, Meetup, and professional associations</p>
-                </div>
-              </div>
-            )}
+            {eventsLoading && <SearchLoadingAnimation />}
 
             {!eventsLoading && events.length === 0 && !eventsError && !eventsQuery && (
               <div className="mt-20 text-center">

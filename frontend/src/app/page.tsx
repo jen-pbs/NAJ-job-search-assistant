@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import SearchBar from "@/components/SearchBar";
 import ProfileCard from "@/components/ProfileCard";
 import EventCard from "@/components/EventCard";
@@ -59,6 +59,26 @@ export default function Home() {
   const [eventsLoading, setEventsLoading] = useState(false);
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [eventsQuery, setEventsQuery] = useState<string | null>(null);
+  const [freeOnly, setFreeOnly] = useState(false);
+
+  // User name
+  const [userName, setUserName] = useState<string | null>(null);
+  const [nameInput, setNameInput] = useState("");
+
+  useEffect(() => {
+    const saved = localStorage.getItem("naj_user_name");
+    if (saved) setUserName(saved);
+  }, []);
+
+  const handleSetName = () => {
+    if (nameInput.trim()) {
+      const name = nameInput.trim();
+      setUserName(name);
+      localStorage.setItem("naj_user_name", name);
+    }
+  };
+
+  const filteredEvents = freeOnly ? events.filter((e) => e.is_free === true) : events;
 
   const handlePeopleSearch = async (query: string) => {
     setPeopleLoading(true);
@@ -135,6 +155,49 @@ export default function Home() {
     else if (activeTab === "events") handleEventSearch(query);
   };
 
+  // Welcome screen
+  if (!userName) {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 relative flex items-center justify-center">
+        <NetworkBackground />
+        <div className="relative z-[1] max-w-md w-full mx-4">
+          <div className="bg-white/90 backdrop-blur-sm border border-slate-200/60 rounded-2xl p-8 shadow-lg text-center">
+            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mx-auto mb-5 shadow-md">
+              <span className="text-white font-bold text-xl">N</span>
+            </div>
+            <h1 className="text-2xl font-semibold text-slate-800 mb-1">
+              Welcome to <span className="text-indigo-600">NAJ Search</span>
+            </h1>
+            <p className="text-sm text-slate-400 mb-6">
+              Network &amp; Job Assistant
+            </p>
+            <p className="text-sm text-slate-600 mb-4">What&apos;s your name?</p>
+            <form
+              onSubmit={(e) => { e.preventDefault(); handleSetName(); }}
+              className="flex gap-2"
+            >
+              <input
+                type="text"
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                placeholder="Enter your first name..."
+                className="flex-1 px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 bg-white text-slate-800 placeholder-slate-400"
+                autoFocus
+              />
+              <button
+                type="submit"
+                disabled={!nameInput.trim()}
+                className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white rounded-xl hover:from-indigo-700 hover:to-indigo-600 disabled:from-slate-200 disabled:to-slate-200 disabled:text-slate-400 text-sm font-medium transition-all"
+              >
+                Start
+              </button>
+            </form>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 relative">
       <NetworkBackground />
@@ -149,7 +212,7 @@ export default function Home() {
               </div>
               <div>
                 <h1 className="text-lg font-semibold text-slate-900 tracking-tight">
-                  NAJ <span className="text-indigo-600">Search</span>
+                  Hi, {userName} <span className="text-slate-300 font-normal">|</span> NAJ <span className="text-indigo-600">Search</span>
                 </h1>
                 <p className="text-[10px] text-slate-400 -mt-0.5 tracking-wide uppercase">
                   Network &amp; Job Assistant
@@ -284,15 +347,28 @@ export default function Home() {
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-indigo-500"></div>
                   <p className="text-sm text-slate-600">
-                    <span className="font-semibold text-slate-800">{events.length}</span> events found
+                    <span className="font-semibold text-slate-800">{filteredEvents.length}</span> events found
+                    {freeOnly && events.length !== filteredEvents.length && (
+                      <span className="text-slate-400"> ({events.length} total)</span>
+                    )}
                   </p>
                 </div>
+                <button
+                  onClick={() => setFreeOnly(!freeOnly)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${
+                    freeOnly
+                      ? "bg-green-50 text-green-700 border-green-200"
+                      : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"
+                  }`}
+                >
+                  <span>{freeOnly ? "Showing free only" : "Show free only"}</span>
+                </button>
               </div>
             )}
 
-            {events.length > 0 && (
+            {filteredEvents.length > 0 && (
               <div className="mt-4 space-y-3">
-                {events.map((event, i) => (
+                {filteredEvents.map((event, i) => (
                   <EventCard key={event.url + i} event={event} index={i} />
                 ))}
               </div>

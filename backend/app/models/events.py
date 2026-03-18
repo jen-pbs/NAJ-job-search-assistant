@@ -8,6 +8,7 @@ class Event(BaseModel):
     location: str | None = None
     source: str | None = None
     description: str | None = None
+    is_free: bool | None = None
     relevance_score: float | None = None
     relevance_reason: str | None = None
 

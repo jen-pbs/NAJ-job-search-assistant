@@ -48,8 +48,9 @@ export interface Event {
   location: string | null;
   source: string | null;
   description: string | null;
+  is_free: boolean | null;
   relevance_score: number | null;
-  relevance_reason: string | null;
+  relevance_reason: number | null;
 }
 
 export interface EventSearchResponse {

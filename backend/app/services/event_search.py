@@ -232,9 +232,26 @@ def _parse_event_result(text: str, url: str) -> dict | None:
     if loc_match:
         location = loc_match.group(1).strip()
 
+    # Additional date patterns: "May 17 - 20, 2026" or "May 17-20"
+    if not date:
+        date_match3 = re.search(
+            r"((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:\s*[-–]\s*(?:\w+\s+)?\d{1,2})?,?\s*\d{4})",
+            full_text,
+            re.IGNORECASE,
+        )
+        if date_match3:
+            date = date_match3.group(1).strip()
+
     # Check for virtual
     if re.search(r"\b(virtual|online|webinar|zoom)\b", full_text, re.IGNORECASE):
         location = location or "Virtual"
+
+    # Detect free events
+    is_free = None
+    if re.search(r"\b(free|no cost|complimentary|free admission|free entry|\$0)\b", full_text, re.IGNORECASE):
+        is_free = True
+    elif re.search(r"\b(\$\d+|paid|registration fee|ticket price|early.?bird)\b", full_text, re.IGNORECASE):
+        is_free = False
 
     return {
         "title": title[:150],
@@ -243,6 +260,7 @@ def _parse_event_result(text: str, url: str) -> dict | None:
         "location": location,
         "source": source,
         "description": description[:300] if description else None,
+        "is_free": is_free,
     }
 
 

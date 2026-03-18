@@ -29,11 +29,26 @@ export default function EventCard({ event, index }: EventCardProps) {
   return (
     <div className="bg-white border border-slate-200/60 rounded-xl p-5 hover:border-slate-300 hover:shadow-sm transition-all">
       <div className="flex items-start gap-4">
-        {/* Calendar icon */}
-        <div className="w-11 h-11 rounded-lg bg-gradient-to-br from-indigo-50 to-purple-50 flex items-center justify-center flex-shrink-0 border border-indigo-100/50">
-          <svg className="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
-          </svg>
+        {/* Date block */}
+        <div className="w-14 flex-shrink-0 text-center">
+          {event.date ? (
+            <div className="rounded-lg bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100/50 p-2">
+              <p className="text-[10px] font-medium text-indigo-400 uppercase leading-tight">
+                {event.date.replace(/\d{4}/, "").replace(/,?\s*$/, "").trim().split(" ")[0]?.slice(0, 3) || "TBD"}
+              </p>
+              <p className="text-lg font-bold text-indigo-600 leading-tight">
+                {event.date.match(/\d{1,2}/)?.[0] || "?"}
+              </p>
+              <p className="text-[9px] text-indigo-300">
+                {event.date.match(/\d{4}/)?.[0] || ""}
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-lg bg-slate-50 border border-slate-100 p-2">
+              <p className="text-[10px] font-medium text-slate-300 uppercase">Date</p>
+              <p className="text-lg font-bold text-slate-300 leading-tight">TBD</p>
+            </div>
+          )}
         </div>
 
         <div className="flex-1 min-w-0">
@@ -44,15 +59,24 @@ export default function EventCard({ event, index }: EventCardProps) {
                 <h3 className="font-semibold text-slate-900 text-sm leading-snug">{event.title}</h3>
               </div>
 
-              <div className="flex items-center gap-3 mt-1.5">
-                {event.date && (
-                  <span className="text-xs text-slate-500 flex items-center gap-1">
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                    </svg>
-                    {event.date}
+              {/* Date full text */}
+              {event.date && (
+                <p className="text-xs text-slate-600 font-medium mt-0.5">{event.date}</p>
+              )}
+
+              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                {/* Free/Paid badge */}
+                {event.is_free === true && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full border font-semibold bg-green-50 text-green-700 border-green-200">
+                    FREE
                   </span>
                 )}
+                {event.is_free === false && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full border font-medium bg-slate-50 text-slate-500 border-slate-200">
+                    Paid
+                  </span>
+                )}
+
                 {event.location && (
                   <span className="text-xs text-slate-500 flex items-center gap-1">
                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

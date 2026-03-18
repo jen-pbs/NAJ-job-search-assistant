@@ -36,7 +36,7 @@ const LOADING_MESSAGES = [
   "Almost there... just polishing the results...",
 ];
 
-function SearchLoadingAnimation({ query }: { query?: string }) {
+function SearchLoadingAnimation({ query, type = "people" }: { query?: string; type?: "people" | "events" }) {
   const [msgIndex, setMsgIndex] = useState(0);
   const [tailSwish, setTailSwish] = useState(false);
   const [blink, setBlink] = useState(false);
@@ -189,9 +189,16 @@ function SearchLoadingAnimation({ query }: { query?: string }) {
         </p>
       </div>
 
-      <p className="text-xs text-slate-400">
-        Searching 6 sources in parallel{dots}
-      </p>
+      <div className="text-center">
+        <p className="text-sm font-medium text-slate-600">
+          {type === "events" ? "Searching for events..." : "Searching & evaluating profiles..."}
+        </p>
+        <p className="text-xs text-slate-400 mt-1">
+          {type === "events"
+            ? "Checking Eventbrite, Meetup, and professional associations"
+            : `AI is analyzing each profile. This may take 30-60 seconds${dots}`}
+        </p>
+      </div>
     </div>
   );
 }
@@ -555,7 +562,7 @@ export default function Home() {
               </div>
             )}
 
-            {eventsLoading && <SearchLoadingAnimation />}
+            {eventsLoading && <SearchLoadingAnimation type="events" />}
 
             {!eventsLoading && events.length === 0 && !eventsError && !eventsQuery && (
               <div className="mt-20 text-center">

@@ -15,94 +15,134 @@ import {
 } from "@/lib/api";
 
 const LOADING_MESSAGES = [
-  { emoji: "🔍", text: "Searching across DuckDuckGo, Brave, Bing, and Google..." },
-  { emoji: "🕵️", text: "Sneaking into public LinkedIn pages (legally, I promise)..." },
-  { emoji: "📚", text: "Checking Google Scholar for publications..." },
-  { emoji: "🧬", text: "Looking up ORCID career timelines..." },
-  { emoji: "📰", text: "Scanning press releases and conference bios..." },
-  { emoji: "🤖", text: "AI is reading through all the profiles..." },
-  { emoji: "🎯", text: "Scoring relevance for each person..." },
-  { emoji: "🧠", text: "Fun fact: HEOR stands for Health Economics and Outcomes Research!" },
-  { emoji: "☕", text: "This is the part where you grab a coffee..." },
-  { emoji: "🎪", text: "Juggling 6 data sources at once... don't drop any..." },
-  { emoji: "🔮", text: "Consulting the crystal ball of career networking..." },
-  { emoji: "🏃", text: "Running faster than a recruiter sliding into DMs..." },
-  { emoji: "📊", text: "Cross-referencing data like a detective with a spreadsheet..." },
-  { emoji: "🎭", text: "Pretending to be a regular browser... nothing to see here..." },
-  { emoji: "🌐", text: "Visiting more websites than you do on a lazy Sunday..." },
-  { emoji: "🤓", text: "Reading academic papers so you don't have to..." },
-  { emoji: "🎲", text: "Rolling for initiative... nat 20! Extra profiles found!" },
-  { emoji: "🐕", text: "Fetching data... good bot, good bot..." },
-  { emoji: "🧩", text: "Piecing together professional histories like a puzzle..." },
-  { emoji: "🚀", text: "Almost there... just polishing the results..." },
+  "Searching across DuckDuckGo, Brave, Bing, and Google...",
+  "Sneaking into public LinkedIn pages (legally, I promise)...",
+  "Checking Google Scholar for publications...",
+  "Looking up ORCID career timelines...",
+  "Scanning press releases and conference bios...",
+  "AI is reading through all the profiles...",
+  "Scoring relevance for each person...",
+  "This is the part where you grab a coffee...",
+  "Juggling 6 data sources at once... don't drop any...",
+  "Consulting the crystal ball of career networking...",
+  "Running faster than a recruiter sliding into DMs...",
+  "Cross-referencing data like a detective with a spreadsheet...",
+  "Pretending to be a regular browser... nothing to see here...",
+  "Visiting more websites than you do on a lazy Sunday...",
+  "Reading academic papers so you don't have to...",
+  "Rolling for initiative... nat 20! Extra profiles found!",
+  "Fetching data... good bot, good bot...",
+  "Piecing together professional histories like a puzzle...",
+  "Almost there... just polishing the results...",
 ];
 
-function SearchLoadingAnimation() {
+function SearchLoadingAnimation({ query }: { query?: string }) {
   const [msgIndex, setMsgIndex] = useState(0);
-  const [dots, setDots] = useState("");
+  const [tailWag, setTailWag] = useState(false);
 
   useEffect(() => {
-    // Start from a random message
     setMsgIndex(Math.floor(Math.random() * LOADING_MESSAGES.length));
   }, []);
 
   useEffect(() => {
     const msgTimer = setInterval(() => {
       setMsgIndex((prev) => (prev + 1) % LOADING_MESSAGES.length);
-    }, 3500);
+    }, 6000);
     return () => clearInterval(msgTimer);
   }, []);
 
   useEffect(() => {
-    const dotTimer = setInterval(() => {
-      setDots((prev) => (prev.length >= 3 ? "" : prev + "."));
-    }, 500);
-    return () => clearInterval(dotTimer);
+    const wagTimer = setInterval(() => {
+      setTailWag((prev) => !prev);
+    }, 400);
+    return () => clearInterval(wagTimer);
   }, []);
 
-  const msg = LOADING_MESSAGES[msgIndex];
+  // Extract field from search query for targeted messages
+  const fieldHint = query?.toLowerCase() || "";
+  let fieldMessage = "Searching for the best connections in your field...";
+  if (fieldHint.includes("heor") || fieldHint.includes("health econom"))
+    fieldMessage = "Deep-diving into health economics and outcomes research networks...";
+  else if (fieldHint.includes("pharma") || fieldHint.includes("biotech"))
+    fieldMessage = "Scanning pharma and biotech professional networks...";
+  else if (fieldHint.includes("data science") || fieldHint.includes("machine learning"))
+    fieldMessage = "Crunching through data science and ML communities...";
+  else if (fieldHint.includes("medical") || fieldHint.includes("clinical"))
+    fieldMessage = "Searching medical and clinical research circles...";
+  else if (fieldHint.includes("market access") || fieldHint.includes("pricing"))
+    fieldMessage = "Exploring market access and pricing strategy networks...";
+  else if (fieldHint.includes("epidemiol"))
+    fieldMessage = "Investigating epidemiology and public health networks...";
+  else if (fieldHint.includes("regulat") || fieldHint.includes("fda"))
+    fieldMessage = "Navigating regulatory affairs professional networks...";
+  else if (fieldHint.includes("finance") || fieldHint.includes("invest"))
+    fieldMessage = "Scanning finance and investment professional circles...";
+  else if (fieldHint.includes("engineer") || fieldHint.includes("software"))
+    fieldMessage = "Searching software engineering and tech communities...";
+  else if (fieldHint.includes("consult"))
+    fieldMessage = "Browsing consulting networks and advisory circles...";
+
+  const messages = [fieldMessage, ...LOADING_MESSAGES];
+  const msg = messages[msgIndex % messages.length];
 
   return (
     <div className="mt-16 flex flex-col items-center gap-5">
-      {/* Animated character */}
+      {/* Animated dog character - SVG */}
       <div className="relative">
-        <div className="text-6xl animate-bounce" style={{ animationDuration: "1.5s" }}>
-          {msg.emoji}
-        </div>
-        {/* Subtle shadow */}
-        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-10 h-2 bg-indigo-200/40 rounded-full animate-pulse" />
+        <svg width="80" height="80" viewBox="0 0 100 100" className="animate-bounce" style={{ animationDuration: "2s" }}>
+          {/* Body */}
+          <ellipse cx="50" cy="62" rx="22" ry="18" fill="none" stroke="black" strokeWidth="2.5" />
+          {/* Head */}
+          <circle cx="50" cy="35" r="16" fill="none" stroke="black" strokeWidth="2.5" />
+          {/* Left ear (floppy) */}
+          <path d="M36 28 Q28 15 24 28" fill="none" stroke="black" strokeWidth="2.5" strokeLinecap="round" />
+          {/* Right ear (floppy) */}
+          <path d="M64 28 Q72 15 76 28" fill="none" stroke="black" strokeWidth="2.5" strokeLinecap="round" />
+          {/* Eyes */}
+          <circle cx="44" cy="33" r="2.5" fill="black" />
+          <circle cx="56" cy="33" r="2.5" fill="black" />
+          {/* Eye sparkle */}
+          <circle cx="45" cy="32" r="0.8" fill="white" />
+          <circle cx="57" cy="32" r="0.8" fill="white" />
+          {/* Nose */}
+          <ellipse cx="50" cy="39" rx="3" ry="2" fill="black" />
+          {/* Mouth - happy */}
+          <path d="M45 42 Q50 47 55 42" fill="none" stroke="black" strokeWidth="1.5" strokeLinecap="round" />
+          {/* Tongue */}
+          <path d="M50 44 Q51 48 50 49" fill="none" stroke="black" strokeWidth="1.5" strokeLinecap="round" />
+          {/* Front legs */}
+          <line x1="38" y1="76" x2="36" y2="88" stroke="black" strokeWidth="2.5" strokeLinecap="round" />
+          <line x1="62" y1="76" x2="64" y2="88" stroke="black" strokeWidth="2.5" strokeLinecap="round" />
+          {/* Paws */}
+          <circle cx="35" cy="89" r="2.5" fill="none" stroke="black" strokeWidth="2" />
+          <circle cx="65" cy="89" r="2.5" fill="none" stroke="black" strokeWidth="2" />
+          {/* Tail - wagging */}
+          <path
+            d={tailWag ? "M72 55 Q85 42 88 50" : "M72 55 Q85 48 82 56"}
+            fill="none" stroke="black" strokeWidth="2.5" strokeLinecap="round"
+            style={{ transition: "d 0.3s ease-in-out" }}
+          />
+          {/* Collar */}
+          <path d="M38 48 Q50 52 62 48" fill="none" stroke="black" strokeWidth="2" strokeLinecap="round" />
+          {/* Collar tag */}
+          <circle cx="50" cy="52" r="3" fill="none" stroke="black" strokeWidth="1.5" />
+          <text x="50" y="54" textAnchor="middle" fontSize="4" fontWeight="bold" fill="black">N</text>
+        </svg>
+        {/* Shadow */}
+        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-12 h-2 bg-slate-200/60 rounded-full animate-pulse" />
       </div>
 
       {/* Message bubble */}
-      <div className="bg-white border border-slate-200 rounded-2xl px-6 py-3 shadow-sm max-w-md relative">
+      <div className="bg-white border border-slate-200 rounded-2xl px-6 py-3.5 shadow-sm max-w-md relative">
         <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white border-l border-t border-slate-200 rotate-45" />
-        <p className="text-sm text-slate-600 text-center relative z-10">
-          {msg.text}
+        <p className="text-sm text-slate-600 text-center relative z-10 leading-relaxed">
+          {msg}
         </p>
       </div>
 
-      {/* Progress bar */}
-      <div className="w-64 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-        <div
-          className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 rounded-full animate-loading-bar"
-          style={{
-            backgroundSize: "200% 100%",
-            animation: "loading-bar 2s ease-in-out infinite",
-          }}
-        />
-      </div>
-
       <p className="text-xs text-slate-400">
-        Searching 6 sources in parallel{dots}
+        Searching 6 sources in parallel
       </p>
-
-      <style jsx>{`
-        @keyframes loading-bar {
-          0% { width: 5%; background-position: 0% 0%; }
-          50% { width: 70%; background-position: 100% 0%; }
-          100% { width: 5%; background-position: 0% 0%; }
-        }
-      `}</style>
     </div>
   );
 }
@@ -148,6 +188,7 @@ export default function Home() {
   const [peopleError, setPeopleError] = useState<string | null>(null);
   const [peopleQuery, setPeopleQuery] = useState<string | null>(null);
   const [chatProfile, setChatProfile] = useState<LinkedInProfile | null>(null);
+  const [lastSearchInput, setLastSearchInput] = useState("");
 
   // Events state
   const [events, setEvents] = useState<Event[]>([]);
@@ -176,6 +217,7 @@ export default function Home() {
   const filteredEvents = freeOnly ? events.filter((e) => e.is_free === true) : events;
 
   const handlePeopleSearch = async (query: string) => {
+    setLastSearchInput(query);
     setPeopleLoading(true);
     setPeopleError(null);
     setProfiles([]);
@@ -408,7 +450,7 @@ export default function Home() {
               </div>
             )}
 
-            {peopleLoading && <SearchLoadingAnimation />}
+            {peopleLoading && <SearchLoadingAnimation query={lastSearchInput} />}
 
             {!peopleLoading && profiles.length === 0 && !peopleError && !peopleQuery && (
               <div className="mt-20 text-center">

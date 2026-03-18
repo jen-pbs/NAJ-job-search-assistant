@@ -33,16 +33,56 @@ Also extract and classify each profile:
 5. "field": Pick the most relevant field from this list ONLY: "HEOR", "RWE", "Medical affairs", "Health Policy", "Neuroscience", "Genetic medicine", "Mental Health", "Multidisciplinary". Use null if none fit.
 6. "company_type": Pick from this list ONLY: "Biotech", "Biopharmaceutic", "Venture Capital", "Academia". Use null if none fit or unclear.
 
-Return a JSON object with a "scores" key containing an array. Each item must have:
-- "index": profile index (0-based)
+Return a JSON object with a "scores" key containing an array. Each item MUST have:
+- "index": profile index (0-based) -- MUST match the profile number exactly
+- "name": the person's full name (copy it exactly from the profile) -- this is used to verify correct matching
 - "score": 0-100
-- "reason": 2-3 sentences explaining your reasoning, referencing specific details from their profile
+- "reason": 2-3 sentences about THIS SPECIFIC PERSON. Start the reason with their name. Reference details from THEIR profile only, not other profiles.
 - "company": extracted company name or null
 - "role": extracted job title or null
 - "field": one of the field options above, or null
 - "company_type": one of the company type options above, or null
 
+CRITICAL: Do NOT mix up profiles. Each item's reason must describe the person at that index. Start each reason with the person's name to prevent confusion.
+
 Be direct and honest. If a profile doesn't seem relevant, say so and give a low score."""
+
+
+def _apply_scores(profiles: list[LinkedInProfile], scores: list[dict]) -> list[LinkedInProfile]:
+    """Apply AI scores to profiles with name-based cross-validation."""
+    # Build name->index lookup for correction
+    name_to_idx: dict[str, int] = {}
+    for i, p in enumerate(profiles):
+        name_to_idx[p.name.lower().strip()] = i
+
+    for item in scores:
+        idx = item.get("index", -1)
+        response_name = (item.get("name") or "").lower().strip()
+
+        # Validate: does the name in the response match the profile at this index?
+        if 0 <= idx < len(profiles):
+            expected_name = profiles[idx].name.lower().strip()
+            if response_name and expected_name not in response_name and response_name not in expected_name:
+                # Name mismatch -- try to find the correct profile by name
+                corrected_idx = None
+                for known_name, known_idx in name_to_idx.items():
+                    if response_name in known_name or known_name in response_name:
+                        corrected_idx = known_idx
+                        break
+                if corrected_idx is not None:
+                    print(f"[Scorer] Index correction: {idx} -> {corrected_idx} for '{response_name}'")
+                    idx = corrected_idx
+
+        if 0 <= idx < len(profiles):
+            profiles[idx].relevance_score = item.get("score", 0)
+            profiles[idx].relevance_reason = item.get("reason", "")
+            profiles[idx].company = item.get("company") or profiles[idx].company
+            profiles[idx].role_title = item.get("role") or profiles[idx].role_title
+            profiles[idx].field = item.get("field")
+            profiles[idx].company_type = item.get("company_type")
+
+    profiles.sort(key=lambda p: p.relevance_score or 0, reverse=True)
+    return profiles
 
 
 def _build_profile_text_merged(i: int, profile: MergedProfile) -> str:
@@ -196,17 +236,7 @@ async def score_merged_profiles(
         parsed = json.loads(content)
         scores = parsed.get("scores", parsed if isinstance(parsed, list) else [])
 
-        for item in scores:
-            idx = item.get("index", -1)
-            if 0 <= idx < len(profiles):
-                profiles[idx].relevance_score = item.get("score", 0)
-                profiles[idx].relevance_reason = item.get("reason", "")
-                profiles[idx].company = item.get("company") or profiles[idx].company
-                profiles[idx].role_title = item.get("role") or profiles[idx].role_title
-                profiles[idx].field = item.get("field")
-                profiles[idx].company_type = item.get("company_type")
-
-        profiles.sort(key=lambda p: p.relevance_score or 0, reverse=True)
+        profiles = _apply_scores(profiles, scores)
 
     except Exception as e:
         print(f"AI scoring failed (results returned unscored): {e}")
@@ -266,17 +296,7 @@ async def score_profiles(
         parsed = json.loads(content)
         scores = parsed.get("scores", parsed if isinstance(parsed, list) else [])
 
-        for item in scores:
-            idx = item.get("index", -1)
-            if 0 <= idx < len(profiles):
-                profiles[idx].relevance_score = item.get("score", 0)
-                profiles[idx].relevance_reason = item.get("reason", "")
-                profiles[idx].company = item.get("company") or profiles[idx].company
-                profiles[idx].role_title = item.get("role") or profiles[idx].role_title
-                profiles[idx].field = item.get("field")
-                profiles[idx].company_type = item.get("company_type")
-
-        profiles.sort(key=lambda p: p.relevance_score or 0, reverse=True)
+        profiles = _apply_scores(profiles, scores)
 
     except Exception as e:
         print(f"AI scoring failed (results returned unscored): {e}")

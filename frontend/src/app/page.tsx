@@ -38,7 +38,9 @@ const LOADING_MESSAGES = [
 
 function SearchLoadingAnimation({ query }: { query?: string }) {
   const [msgIndex, setMsgIndex] = useState(0);
-  const [tailWag, setTailWag] = useState(false);
+  const [tailSwish, setTailSwish] = useState(false);
+  const [blink, setBlink] = useState(false);
+  const [dots, setDots] = useState("");
 
   useEffect(() => {
     setMsgIndex(Math.floor(Math.random() * LOADING_MESSAGES.length));
@@ -52,13 +54,25 @@ function SearchLoadingAnimation({ query }: { query?: string }) {
   }, []);
 
   useEffect(() => {
-    const wagTimer = setInterval(() => {
-      setTailWag((prev) => !prev);
-    }, 400);
-    return () => clearInterval(wagTimer);
+    const swishTimer = setInterval(() => setTailSwish((p) => !p), 600);
+    return () => clearInterval(swishTimer);
   }, []);
 
-  // Extract field from search query for targeted messages
+  useEffect(() => {
+    const blinkTimer = setInterval(() => {
+      setBlink(true);
+      setTimeout(() => setBlink(false), 200);
+    }, 3000);
+    return () => clearInterval(blinkTimer);
+  }, []);
+
+  useEffect(() => {
+    const dotTimer = setInterval(() => {
+      setDots((prev) => (prev.length >= 3 ? "" : prev + "."));
+    }, 500);
+    return () => clearInterval(dotTimer);
+  }, []);
+
   const fieldHint = query?.toLowerCase() || "";
   let fieldMessage = "Searching for the best connections in your field...";
   if (fieldHint.includes("heor") || fieldHint.includes("health econom"))
@@ -86,53 +100,88 @@ function SearchLoadingAnimation({ query }: { query?: string }) {
   const msg = messages[msgIndex % messages.length];
 
   return (
-    <div className="mt-16 flex flex-col items-center gap-5">
-      {/* Animated dog character - SVG */}
+    <div className="mt-16 flex flex-col items-center gap-6">
+      {/* Cat character */}
       <div className="relative">
-        <svg width="80" height="80" viewBox="0 0 100 100" className="animate-bounce" style={{ animationDuration: "2s" }}>
-          {/* Body */}
-          <ellipse cx="50" cy="62" rx="22" ry="18" fill="none" stroke="black" strokeWidth="2.5" />
-          {/* Head */}
-          <circle cx="50" cy="35" r="16" fill="none" stroke="black" strokeWidth="2.5" />
-          {/* Left ear (floppy) */}
-          <path d="M36 28 Q28 15 24 28" fill="none" stroke="black" strokeWidth="2.5" strokeLinecap="round" />
-          {/* Right ear (floppy) */}
-          <path d="M64 28 Q72 15 76 28" fill="none" stroke="black" strokeWidth="2.5" strokeLinecap="round" />
-          {/* Eyes */}
-          <circle cx="44" cy="33" r="2.5" fill="black" />
-          <circle cx="56" cy="33" r="2.5" fill="black" />
-          {/* Eye sparkle */}
-          <circle cx="45" cy="32" r="0.8" fill="white" />
-          <circle cx="57" cy="32" r="0.8" fill="white" />
-          {/* Nose */}
-          <ellipse cx="50" cy="39" rx="3" ry="2" fill="black" />
-          {/* Mouth - happy */}
-          <path d="M45 42 Q50 47 55 42" fill="none" stroke="black" strokeWidth="1.5" strokeLinecap="round" />
-          {/* Tongue */}
-          <path d="M50 44 Q51 48 50 49" fill="none" stroke="black" strokeWidth="1.5" strokeLinecap="round" />
-          {/* Front legs */}
-          <line x1="38" y1="76" x2="36" y2="88" stroke="black" strokeWidth="2.5" strokeLinecap="round" />
-          <line x1="62" y1="76" x2="64" y2="88" stroke="black" strokeWidth="2.5" strokeLinecap="round" />
-          {/* Paws */}
-          <circle cx="35" cy="89" r="2.5" fill="none" stroke="black" strokeWidth="2" />
-          <circle cx="65" cy="89" r="2.5" fill="none" stroke="black" strokeWidth="2" />
-          {/* Tail - wagging */}
+        <svg width="100" height="110" viewBox="0 0 120 130" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {/* Tail - lazy swish */}
           <path
-            d={tailWag ? "M72 55 Q85 42 88 50" : "M72 55 Q85 48 82 56"}
-            fill="none" stroke="black" strokeWidth="2.5" strokeLinecap="round"
-            style={{ transition: "d 0.3s ease-in-out" }}
+            d={tailSwish
+              ? "M92 82 Q110 70 115 58 Q118 50 112 48"
+              : "M92 82 Q108 74 110 62 Q112 54 106 55"
+            }
+            stroke="#1e1e1e" strokeWidth="3" strokeLinecap="round"
+            style={{ transition: "d 0.5s ease-in-out" }}
           />
-          {/* Collar */}
-          <path d="M38 48 Q50 52 62 48" fill="none" stroke="black" strokeWidth="2" strokeLinecap="round" />
-          {/* Collar tag */}
-          <circle cx="50" cy="52" r="3" fill="none" stroke="black" strokeWidth="1.5" />
-          <text x="50" y="54" textAnchor="middle" fontSize="4" fontWeight="bold" fill="black">N</text>
+
+          {/* Body - sitting loaf shape */}
+          <ellipse cx="60" cy="88" rx="30" ry="22" stroke="#1e1e1e" strokeWidth="2.5" />
+          {/* Chest fluff */}
+          <path d="M48 75 Q52 70 56 75 Q60 70 64 75 Q68 70 72 75" stroke="#1e1e1e" strokeWidth="1.5" strokeLinecap="round" />
+
+          {/* Head */}
+          <ellipse cx="60" cy="48" rx="22" ry="20" stroke="#1e1e1e" strokeWidth="2.5" />
+
+          {/* Left ear - pointy */}
+          <path d="M40 38 L32 14 L48 32" stroke="#1e1e1e" strokeWidth="2.5" strokeLinejoin="round" />
+          {/* Left ear inner */}
+          <path d="M39 34 L35 20 L45 32" stroke="#1e1e1e" strokeWidth="1" />
+          {/* Right ear - pointy */}
+          <path d="M80 38 L88 14 L72 32" stroke="#1e1e1e" strokeWidth="2.5" strokeLinejoin="round" />
+          {/* Right ear inner */}
+          <path d="M81 34 L85 20 L75 32" stroke="#1e1e1e" strokeWidth="1" />
+
+          {/* Eyes - half-lidded and judgy */}
+          {blink ? (
+            <>
+              <line x1="48" y1="46" x2="56" y2="46" stroke="#1e1e1e" strokeWidth="2" strokeLinecap="round" />
+              <line x1="64" y1="46" x2="72" y2="46" stroke="#1e1e1e" strokeWidth="2" strokeLinecap="round" />
+            </>
+          ) : (
+            <>
+              {/* Left eye */}
+              <ellipse cx="52" cy="46" rx="5" ry="4" stroke="#1e1e1e" strokeWidth="2" />
+              <ellipse cx="52" cy="46" rx="2.5" ry="3" fill="#1e1e1e" />
+              <circle cx="53.5" cy="44.5" r="1" fill="white" />
+              {/* Half-lid (aloof look) */}
+              <path d="M47 43 Q52 41 57 43" stroke="#1e1e1e" strokeWidth="2" strokeLinecap="round" />
+              {/* Right eye */}
+              <ellipse cx="68" cy="46" rx="5" ry="4" stroke="#1e1e1e" strokeWidth="2" />
+              <ellipse cx="68" cy="46" rx="2.5" ry="3" fill="#1e1e1e" />
+              <circle cx="69.5" cy="44.5" r="1" fill="white" />
+              {/* Half-lid */}
+              <path d="M63 43 Q68 41 73 43" stroke="#1e1e1e" strokeWidth="2" strokeLinecap="round" />
+            </>
+          )}
+
+          {/* Nose - triangle */}
+          <path d="M58 53 L60 56 L62 53 Z" fill="#1e1e1e" />
+
+          {/* Mouth - tiny unimpressed line */}
+          <path d="M56 57 Q58 58 60 57 Q62 58 64 57" stroke="#1e1e1e" strokeWidth="1.5" strokeLinecap="round" />
+
+          {/* Whiskers - left */}
+          <line x1="44" y1="52" x2="28" y2="49" stroke="#1e1e1e" strokeWidth="1.2" strokeLinecap="round" />
+          <line x1="44" y1="54" x2="28" y2="55" stroke="#1e1e1e" strokeWidth="1.2" strokeLinecap="round" />
+          <line x1="44" y1="56" x2="30" y2="60" stroke="#1e1e1e" strokeWidth="1.2" strokeLinecap="round" />
+          {/* Whiskers - right */}
+          <line x1="76" y1="52" x2="92" y2="49" stroke="#1e1e1e" strokeWidth="1.2" strokeLinecap="round" />
+          <line x1="76" y1="54" x2="92" y2="55" stroke="#1e1e1e" strokeWidth="1.2" strokeLinecap="round" />
+          <line x1="76" y1="56" x2="90" y2="60" stroke="#1e1e1e" strokeWidth="1.2" strokeLinecap="round" />
+
+          {/* Front paws - tucked under */}
+          <ellipse cx="46" cy="106" rx="8" ry="5" stroke="#1e1e1e" strokeWidth="2" />
+          <ellipse cx="74" cy="106" rx="8" ry="5" stroke="#1e1e1e" strokeWidth="2" />
+          {/* Toe lines */}
+          <path d="M42 106 L42 109 M45 106 L45 109 M48 106 L48 109" stroke="#1e1e1e" strokeWidth="1" strokeLinecap="round" />
+          <path d="M70 106 L70 109 M73 106 L73 109 M76 106 L76 109" stroke="#1e1e1e" strokeWidth="1" strokeLinecap="round" />
         </svg>
-        {/* Shadow */}
-        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-12 h-2 bg-slate-200/60 rounded-full animate-pulse" />
+
+        {/* Shadow under the cat */}
+        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-16 h-2.5 bg-slate-200/50 rounded-full" />
       </div>
 
-      {/* Message bubble */}
+      {/* Speech bubble */}
       <div className="bg-white border border-slate-200 rounded-2xl px-6 py-3.5 shadow-sm max-w-md relative">
         <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white border-l border-t border-slate-200 rotate-45" />
         <p className="text-sm text-slate-600 text-center relative z-10 leading-relaxed">
@@ -141,7 +190,7 @@ function SearchLoadingAnimation({ query }: { query?: string }) {
       </div>
 
       <p className="text-xs text-slate-400">
-        Searching 6 sources in parallel
+        Searching 6 sources in parallel{dots}
       </p>
     </div>
   );

@@ -26,14 +26,18 @@ Scoring criteria:
 Profiles:
 {profiles}
 
-Also classify each profile:
-3. "field": Pick the most relevant field from this list ONLY: "HEOR", "RWE", "Medical affairs", "Health Policy", "Neuroscience", "Genetic medicine", "Mental Health", "Multidisciplinary". Use null if none fit.
-4. "company_type": Pick from this list ONLY: "Biotech", "Biopharmaceutic", "Venture Capital", "Academia". Use null if none fit or unclear.
+Also extract and classify each profile:
+3. "company": The person's current company name. Extract it from their headline, experience, or description. Just the company name, nothing else. Use null only if truly unknown.
+4. "role": Their current job title/role. Extract from headline or experience. Use null only if unknown.
+5. "field": Pick the most relevant field from this list ONLY: "HEOR", "RWE", "Medical affairs", "Health Policy", "Neuroscience", "Genetic medicine", "Mental Health", "Multidisciplinary". Use null if none fit.
+6. "company_type": Pick from this list ONLY: "Biotech", "Biopharmaceutic", "Venture Capital", "Academia". Use null if none fit or unclear.
 
 Return a JSON object with a "scores" key containing an array. Each item must have:
 - "index": profile index (0-based)
 - "score": 0-100
 - "reason": 2-3 sentences explaining your reasoning, referencing specific details from their profile
+- "company": extracted company name or null
+- "role": extracted job title or null
 - "field": one of the field options above, or null
 - "company_type": one of the company type options above, or null
 
@@ -118,6 +122,8 @@ async def score_profiles(
             if 0 <= idx < len(profiles):
                 profiles[idx].relevance_score = item.get("score", 0)
                 profiles[idx].relevance_reason = item.get("reason", "")
+                profiles[idx].company = item.get("company") or profiles[idx].company
+                profiles[idx].role_title = item.get("role") or profiles[idx].role_title
                 profiles[idx].field = item.get("field")
                 profiles[idx].company_type = item.get("company_type")
 

@@ -44,10 +44,11 @@ async def save_contact_to_notion(
         "title": [{"text": {"content": contact.name}}]
     }
 
-    # Role (rich_text) - from headline
-    if contact.headline:
+    # Role (rich_text) - prefer AI-extracted role, fallback to headline
+    role = contact.role_title or contact.headline
+    if role:
         properties["Role"] = {
-            "rich_text": [{"text": {"content": contact.headline}}]
+            "rich_text": [{"text": {"content": role}}]
         }
 
     # LinkedIn (url)
@@ -56,42 +57,13 @@ async def save_contact_to_notion(
             "url": contact.linkedin_url
         }
 
-    # Company (rich_text) - extract from headline if possible
-    if contact.headline and " at " in contact.headline:
-        company = contact.headline.split(" at ")[-1].strip()
+    # Company (rich_text) - AI-extracted
+    if contact.company:
         properties["Company"] = {
-            "rich_text": [{"text": {"content": company}}]
+            "rich_text": [{"text": {"content": contact.company}}]
         }
-    elif contact.headline and " - " in contact.headline:
-        parts = contact.headline.split(" - ")
-        if len(parts) >= 2:
-            company = parts[-1].strip()
-            properties["Company"] = {
-                "rich_text": [{"text": {"content": company}}]
-            }
 
-    # Location (rich_text) - if available
-    if contact.location:
-        # No dedicated Location column, add to notes
-        pass
 
-    # Notes (rich_text) - AI assessment + user notes
-    notes_parts = []
-    if contact.relevance_score is not None:
-        notes_parts.append(f"Relevance: {contact.relevance_score}/100")
-    if contact.relevance_reason:
-        notes_parts.append(f"AI: {contact.relevance_reason}")
-    if contact.location:
-        notes_parts.append(f"Location: {contact.location}")
-    if contact.notes:
-        notes_parts.append(contact.notes)
-
-    if notes_parts:
-        notes_text = "\n".join(notes_parts)
-        # Notion rich_text max is 2000 chars
-        properties["Notes"] = {
-            "rich_text": [{"text": {"content": notes_text[:2000]}}]
-        }
 
     # Field (select) - HEOR, RWE, Medical affairs, etc.
     field_value = contact.field or contact.domain

@@ -25,6 +25,8 @@ export default function ProfileCard({ profile, index }: ProfileCardProps) {
         linkedin_url: profile.linkedin_url,
         relevance_score: profile.relevance_score || undefined,
         relevance_reason: profile.relevance_reason || undefined,
+        company: profile.company || undefined,
+        role_title: profile.role_title || undefined,
         field: profile.field || undefined,
         company_type: profile.company_type || undefined,
         status: "Discovered",

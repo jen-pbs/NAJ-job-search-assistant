@@ -16,6 +16,8 @@ export interface LinkedInProfile {
   snippet: string | null;
   relevance_score: number | null;
   relevance_reason: string | null;
+  company: string | null;
+  role_title: string | null;
   field: string | null;
   company_type: string | null;
 }
@@ -33,6 +35,8 @@ export interface SaveContactRequest {
   linkedin_url: string;
   relevance_score?: number;
   relevance_reason?: string;
+  company?: string;
+  role_title?: string;
   status?: string;
   notes?: string;
   field?: string;

@@ -40,6 +40,48 @@ EVENT_SITES = [
 ]
 
 
+def _is_specific_event_url(url: str) -> bool:
+    """Return True only if the URL points to a specific event, not a listing/directory page."""
+    if not url or not url.startswith("http"):
+        return False
+
+    # Block known non-event patterns
+    if "linkedin.com" in url:
+        return False
+
+    # Eventbrite: only /e/ URLs are specific events
+    if "eventbrite.com" in url:
+        return "/e/" in url
+
+    # Meetup: only /events/ paths with a specific event ID are real events
+    if "meetup.com" in url:
+        return "/events/" in url
+
+    # Lu.ma: specific event pages have a short slug after the domain
+    if "lu.ma" in url:
+        parts = url.rstrip("/").split("/")
+        return len(parts) > 3 and len(parts[-1]) > 2
+
+    # For all other sites: reject homepages and generic directories
+    # A specific event URL typically has 3+ path segments
+    path = re.sub(r"^https?://[^/]+", "", url).rstrip("/")
+    if not path or path == "/":
+        return False
+
+    # Reject common directory patterns
+    reject = [
+        "/find/", "/search", "/discover", "/category/", "/topics/",
+        "/blog/", "/about", "/contact", "/pricing",
+        "/d/", "/b/", "/cc/", "/o/",
+    ]
+    if any(r in path.lower() for r in reject):
+        return False
+
+    # Must have at least one meaningful path segment beyond the domain
+    segments = [s for s in path.split("/") if s]
+    return len(segments) >= 1
+
+
 def _search_events_sync(query: str, location: str | None, max_results: int = 15) -> list[dict]:
     """Search DuckDuckGo for events matching the query."""
     results = []
@@ -126,27 +168,8 @@ def _search_events_sync(query: str, location: str | None, max_results: int = 15)
                         if not href or "duckduckgo.com" in href or href in seen_urls:
                             continue
 
-                        # Skip non-event results and generic listing/homepage URLs
-                        if "linkedin.com" in href:
-                            continue
-                        # Eventbrite listing pages (/d/, /b/, /cc/, homepage)
-                        if re.search(r"eventbrite\.com/([db]/|cc/|o/|$)", href):
-                            continue
-                        # Generic homepages and directory pages
-                        skip_patterns = [
-                            r"^https?://(?:www\.)?meetup\.com/?$",
-                            r"^https?://(?:www\.)?meetup\.com/find/",
-                            r"^https?://(?:www\.)?meetup\.com/topics/",
-                            r"^https?://(?:www\.)?eventbrite\.com/?$",
-                            r"^https?://(?:www\.)?lu\.ma/?$",
-                            r"^https?://(?:www\.)?\w+\.com/?$",
-                            r"^https?://(?:www\.)?\w+\.org/?$",
-                            r"/discover[/-]",
-                            r"/search[?/]",
-                            r"/category/",
-                            r"/topics?/",
-                        ]
-                        if any(re.search(pat, href) for pat in skip_patterns):
+                        # Only allow URLs that look like specific events
+                        if not _is_specific_event_url(href):
                             continue
 
                         clean_url = re.sub(r"\?.*$", "", href)

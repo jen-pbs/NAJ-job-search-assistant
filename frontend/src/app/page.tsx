@@ -245,7 +245,7 @@ export default function Home() {
       {/* Content */}
       <div className="max-w-5xl mx-auto px-6 pt-10 pb-6 relative z-[1]">
         <div className="text-center mb-8">
-          <p className="text-sm text-indigo-500 font-medium mb-1">
+          <p className="text-3xl text-indigo-500 font-bold mb-2">
             Hi, {userName}
           </p>
           <h2 className="text-2xl font-semibold text-slate-800 mb-2">

@@ -17,12 +17,26 @@ window.chrome = {runtime: {}};
 """
 
 EVENT_SITES = [
+    # Event platforms
     "eventbrite.com",
     "meetup.com",
     "lu.ma",
+    # HEOR / Health economics associations
     "ispor.org",
     "smdm.org",
     "academyhealth.org",
+    "ashecon.org",
+    "healtheconomics.org",
+    # Pharma / Biotech
+    "biocom.org",
+    "bio.org",
+    "biopharmadive.com",
+    "informaconnect.com",
+    "becarispublishing.com",
+    # Career fairs
+    "biospace.com",
+    "careers.pharmiweb.com",
+    "scilife.io",
 ]
 
 
@@ -30,15 +44,19 @@ def _search_events_sync(query: str, location: str | None, max_results: int = 15)
     """Search DuckDuckGo for events matching the query."""
     results = []
 
-    site_filter = " OR ".join(f"site:{s}" for s in EVENT_SITES[:3])
-    search_query = f"{query} event conference 2026"
-    if location:
-        search_query += f" {location}"
+    loc_str = f" {location}" if location else ""
+
+    # Group sites for different query focuses
+    platform_sites = " OR ".join(f"site:{s}" for s in ["eventbrite.com", "meetup.com", "lu.ma"])
+    heor_sites = " OR ".join(f"site:{s}" for s in ["ispor.org", "ashecon.org", "academyhealth.org", "smdm.org", "healtheconomics.org"])
+    pharma_sites = " OR ".join(f"site:{s}" for s in ["biocom.org", "bio.org", "informaconnect.com", "biopharmadive.com"])
 
     queries = [
-        f"({site_filter}) {search_query}",
-        f"{query} conference 2026 HEOR health economics",
-        f"{query} networking event meetup 2026",
+        f"({platform_sites}) {query} event conference 2026{loc_str}",
+        f"({heor_sites}) {query} conference 2026",
+        f"({pharma_sites}) {query} conference 2026",
+        f"{query} networking event meetup 2026{loc_str}",
+        f"{query} career fair pharma biotech health 2026{loc_str}",
     ]
 
     with sync_playwright() as p:
@@ -90,20 +108,35 @@ def _search_events_sync(query: str, location: str | None, max_results: int = 15)
                         article = articles.nth(i)
                         text = article.inner_text().strip()
 
-                        # Find first link in article
-                        link_el = article.locator("a[href]").first
-                        if link_el.count() == 0:
-                            continue
-                        href = link_el.get_attribute("href") or ""
+                        # Find the real destination link (not DDG redirect)
+                        href = ""
+                        all_links = article.locator("a[href]")
+                        for li in range(all_links.count()):
+                            h = all_links.nth(li).get_attribute("href") or ""
+                            if h and "duckduckgo.com" not in h and h.startswith("http"):
+                                href = h
+                                break
 
-                        if not href or href in seen_urls:
+                        # Fallback: check data-href or extract from DDG redirect
+                        if not href:
+                            first_link = article.locator("a[href]").first
+                            if first_link.count() > 0:
+                                href = first_link.get_attribute("data-href") or first_link.get_attribute("href") or ""
+
+                        if not href or "duckduckgo.com" in href or href in seen_urls:
                             continue
 
-                        # Skip non-event results
+                        # Skip non-event results and generic listing pages
                         if "linkedin.com" in href:
+                            continue
+                        if re.search(r"eventbrite\.com/[db]/", href):
+                            continue
+                        if href.rstrip("/") in ("https://www.eventbrite.com", "https://www.meetup.com"):
                             continue
 
                         clean_url = re.sub(r"\?.*$", "", href)
+                        if clean_url in seen_urls:
+                            continue
                         seen_urls.add(clean_url)
 
                         parsed = _parse_event_result(text, clean_url)
@@ -130,17 +163,26 @@ def _parse_event_result(text: str, url: str) -> dict | None:
     if len(lines) < 2:
         return None
 
-    # Determine source
+    # Determine source with friendly names
+    source_names = {
+        "eventbrite": "Eventbrite", "meetup": "Meetup", "lu": "Luma",
+        "ispor": "ISPOR", "smdm": "SMDM", "academyhealth": "AcademyHealth",
+        "ashecon": "ASHEcon", "healtheconomics": "IHEA",
+        "biocom": "Biocom", "bio": "BIO", "biopharmadive": "BioPharma Dive",
+        "informaconnect": "Informa", "becarispublishing": "Becaris",
+        "biospace": "BioSpace", "pharmiweb": "PharmiWeb", "scilife": "Scilife",
+    }
     source = None
-    for site in EVENT_SITES:
-        if site.split(".")[0] in url.lower():
-            source = site.split(".")[0].capitalize()
+    url_lower = url.lower()
+    for key, name in source_names.items():
+        if key in url_lower:
+            source = name
             break
     if not source:
         domain = re.search(r"https?://(?:www\.)?([^/]+)", url)
         source = domain.group(1) if domain else "Web"
 
-    # Extract title (usually the longest meaningful line that's not a URL)
+    # Extract title and description
     title = ""
     description = ""
     date = None
@@ -149,7 +191,12 @@ def _parse_event_result(text: str, url: str) -> dict | None:
     for line in lines:
         if "http" in line.lower() or len(line) < 10:
             continue
-        if not title and len(line) > 15:
+        # Skip generic lines
+        if line.lower().startswith(("share this", "save this", "join ", "through ")):
+            if not description and len(line) > 40:
+                description = line
+            continue
+        if not title and len(line) > 15 and len(line) < 120:
             title = line
         elif not description and len(line) > 30:
             description = line
@@ -210,6 +257,6 @@ async def search_events(
         _executor, _search_events_sync, query, location, max_results
     )
 
-    events = [Event(**r) for r in raw_results]
+    events = [Event(**r) for r in raw_results if r.get("url") and r["url"].startswith("http")]
     search_desc = f"{query} events" + (f" in {location}" if location else "")
     return events, search_desc

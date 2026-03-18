@@ -106,13 +106,13 @@ export default function Home() {
     },
     events: {
       title: "Discover networking events",
-      subtitle: "Find conferences, meetups, and networking events in your field. NAJ searches across Eventbrite, Meetup, and professional associations.",
-      placeholder: "Search for events, conferences, meetups...",
+      subtitle: "Find conferences, meetups, career fairs, and networking events. NAJ searches Eventbrite, Meetup, ISPOR, ASHEcon, Biocom, BIO, and more.",
+      placeholder: "Search for events, conferences, career fairs...",
       examples: [
         "HEOR conferences 2026",
-        "Health economics networking events",
+        "Pharma biotech career fair California",
         "ISPOR annual meeting",
-        "Pharma industry meetups Bay Area",
+        "Biotech networking meetups San Francisco",
       ],
     },
     jobs: {

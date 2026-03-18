@@ -12,8 +12,16 @@ export default function EventCard({ event, index }: EventCardProps) {
     Eventbrite: "bg-orange-50 text-orange-600 border-orange-200",
     Meetup: "bg-red-50 text-red-600 border-red-200",
     Luma: "bg-purple-50 text-purple-600 border-purple-200",
-    Ispor: "bg-blue-50 text-blue-600 border-blue-200",
-    Academyhealth: "bg-teal-50 text-teal-600 border-teal-200",
+    ISPOR: "bg-blue-50 text-blue-600 border-blue-200",
+    AcademyHealth: "bg-teal-50 text-teal-600 border-teal-200",
+    ASHEcon: "bg-cyan-50 text-cyan-600 border-cyan-200",
+    IHEA: "bg-sky-50 text-sky-600 border-sky-200",
+    SMDM: "bg-violet-50 text-violet-600 border-violet-200",
+    Biocom: "bg-green-50 text-green-600 border-green-200",
+    BIO: "bg-emerald-50 text-emerald-600 border-emerald-200",
+    "BioPharma Dive": "bg-indigo-50 text-indigo-600 border-indigo-200",
+    Informa: "bg-amber-50 text-amber-600 border-amber-200",
+    BioSpace: "bg-lime-50 text-lime-600 border-lime-200",
   };
 
   const badgeColor = sourceColors[event.source || ""] || "bg-slate-50 text-slate-500 border-slate-200";

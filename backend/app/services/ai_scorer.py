@@ -78,6 +78,21 @@ def _build_profile_text_merged(i: int, profile: MergedProfile) -> str:
         if snippet[:60] not in existing and "[LinkedIn]" not in snippet:
             lines.append(f"Search snippet: {snippet[:300]}")
 
+    # Open web bio data (conference bios, press releases, Crunchbase)
+    if profile.web_bio_data:
+        wd = profile.web_bio_data
+        if wd.get("bio_text"):
+            lines.append(f"Professional bio: {wd['bio_text'][:400]}")
+        if wd.get("career_mentions"):
+            lines.append(f"Career mentions: {' | '.join(wd['career_mentions'][:3])}")
+        if wd.get("companies_mentioned"):
+            lines.append(f"Companies associated with: {', '.join(wd['companies_mentioned'][:5])}")
+        if wd.get("web_snippets"):
+            for ws in wd["web_snippets"][:2]:
+                existing = "\n".join(lines)
+                if ws[:50] not in existing:
+                    lines.append(f"Web info: {ws[:250]}")
+
     # Google Scholar data
     if profile.scholar_data:
         sd = profile.scholar_data

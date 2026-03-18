@@ -4,6 +4,7 @@ from app.config import Settings, get_settings
 from app.models.schemas import SearchQuery, SearchResponse, SaveContactRequest
 from app.services.multi_search import search_linkedin_profiles_multi
 from app.services.academic_enricher import enrich_with_academic_data
+from app.services.web_bio_enricher import enrich_with_web_bios
 from app.services.ai_scorer import score_merged_profiles
 from app.services.query_interpreter import interpret_query
 from app.services.notion_client import (
@@ -41,10 +42,31 @@ async def find_people(
 
         profiles = []
         if merged_profiles:
-            # Enrich with academic data (Google Scholar + ORCID)
+            # Enrich with all sources in parallel:
+            # - Academic: Google Scholar + ORCID (researchers)
+            # - Web bios: conference bios, press releases, Crunchbase (industry)
+            import asyncio as _aio
             try:
                 names = [p.name for p in merged_profiles if p.name]
-                academic_data = await enrich_with_academic_data(names)
+                web_profiles = [
+                    {"name": p.name, "company": p.experience_text, "headline": p.headline}
+                    for p in merged_profiles if p.name
+                ]
+
+                academic_task = enrich_with_academic_data(names)
+                web_bio_task = enrich_with_web_bios(web_profiles)
+
+                academic_data, web_bio_data = await _aio.gather(
+                    academic_task, web_bio_task, return_exceptions=True,
+                )
+
+                if isinstance(academic_data, Exception):
+                    print(f"Academic enrichment failed: {academic_data}")
+                    academic_data = {}
+                if isinstance(web_bio_data, Exception):
+                    print(f"Web bio enrichment failed: {web_bio_data}")
+                    web_bio_data = {}
+
                 for mp in merged_profiles:
                     key = mp.name.lower()
                     if key in academic_data:
@@ -57,10 +79,19 @@ async def find_people(
                             mp.orcid_data = ad["orcid"]
                             if "orcid" not in mp.sources:
                                 mp.sources.append("orcid")
-                enriched_count = sum(1 for mp in merged_profiles if mp.scholar_data or mp.orcid_data)
-                print(f"Academic enrichment: {enriched_count}/{len(merged_profiles)} profiles")
+                    if key in web_bio_data:
+                        mp.web_bio_data = web_bio_data[key]
+                        for src in web_bio_data[key].get("sources_checked", []):
+                            if src not in mp.sources and src != "web":
+                                mp.sources.append(src)
+                        if "web_bio" not in mp.sources:
+                            mp.sources.append("web_bio")
+
+                academic_count = sum(1 for mp in merged_profiles if mp.scholar_data or mp.orcid_data)
+                web_count = sum(1 for mp in merged_profiles if mp.web_bio_data)
+                print(f"Enrichment: {academic_count} academic, {web_count} web bio out of {len(merged_profiles)} profiles")
             except Exception as e:
-                print(f"Academic enrichment failed (continuing without): {e}")
+                print(f"Enrichment failed (continuing without): {e}")
 
             if settings.groq_api_key:
                 try:

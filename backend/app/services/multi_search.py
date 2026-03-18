@@ -88,9 +88,10 @@ class MergedProfile:
     sources: list[str] = dc_field(default_factory=list)
     experience_text: str | None = None
     education_text: str | None = None
-    # Academic enrichment data
+    # Enrichment data
     scholar_data: dict | None = None
     orcid_data: dict | None = None
+    web_bio_data: dict | None = None
     about_text: str | None = None
     public_page_data: dict = dc_field(default_factory=dict)
 

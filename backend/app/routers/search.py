@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.config import Settings, get_settings
 from app.models.schemas import SearchQuery, SearchResponse, SaveContactRequest
 from app.services.web_search import search_linkedin_profiles
+from app.services.profile_enricher import enrich_profiles
 from app.services.ai_scorer import score_profiles
 from app.services.query_interpreter import interpret_query
 from app.services.notion_client import (
@@ -38,13 +39,25 @@ async def find_people(
             max_results=interpreted.max_results,
         )
 
-        if settings.groq_api_key and profiles:
+        if profiles:
+            # Enrich profiles by scraping public LinkedIn pages
+            enrichments = None
             try:
-                profiles = await score_profiles(
-                    profiles, body.query, settings.groq_api_key
-                )
+                print(f"Enriching {min(len(profiles), 10)} profiles...")
+                enrichments = await enrich_profiles(profiles, max_enrich=10)
+                enriched_count = sum(1 for e in enrichments if e.get("enriched"))
+                print(f"Successfully enriched {enriched_count}/{len(profiles)} profiles")
             except Exception as e:
-                print(f"AI scoring failed, returning unscored results: {e}")
+                print(f"Profile enrichment failed, scoring with search data only: {e}")
+
+            # AI scoring with enriched data
+            if settings.groq_api_key:
+                try:
+                    profiles = await score_profiles(
+                        profiles, body.query, settings.groq_api_key, enrichments
+                    )
+                except Exception as e:
+                    print(f"AI scoring failed, returning unscored results: {e}")
 
         return SearchResponse(
             query_used=query_used,

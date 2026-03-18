@@ -116,17 +116,22 @@ def _search_duckduckgo_sync(query: str, max_results: int = 20) -> list[dict]:
                 except Exception:
                     pass
 
-            # DuckDuckGo result extraction
-            result_links = page.locator("a[href*='linkedin.com/in/']")
-            count = result_links.count()
+            # Extract results from DuckDuckGo article elements
+            articles = page.locator("article")
+            article_count = articles.count()
             seen_hrefs: set[str] = set()
 
-            for i in range(count):
+            for i in range(article_count):
                 if len(results) >= max_results:
                     break
                 try:
-                    el = result_links.nth(i)
-                    href = el.get_attribute("href") or ""
+                    article = articles.nth(i)
+                    # Find LinkedIn link within this article
+                    link_el = article.locator("a[href*='linkedin.com/in/']").first
+                    if link_el.count() == 0:
+                        continue
+
+                    href = link_el.get_attribute("href") or ""
                     if "linkedin.com/in/" not in href:
                         continue
 
@@ -135,32 +140,31 @@ def _search_duckduckgo_sync(query: str, max_results: int = 20) -> list[dict]:
                         continue
                     seen_hrefs.add(clean_href)
 
-                    text = el.inner_text().strip()
+                    # Get full article text (contains title + snippet)
+                    article_text = article.inner_text().strip()
 
-                    # Try to get snippet from the parent result container
+                    # Parse title: look for "Name - Headline" pattern
+                    title = ""
                     snippet = ""
-                    try:
-                        article = el.locator("xpath=ancestor::article").first
-                        if article.count() > 0:
-                            snippet_el = article.locator("div[data-result='snippet']").first
-                            if snippet_el.count() > 0:
-                                snippet = snippet_el.inner_text().strip()
-                    except Exception:
-                        pass
+                    lines = [l.strip() for l in article_text.split("\n") if l.strip()]
+                    for line in lines:
+                        if ("linkedin" in line.lower() and " - " in line) or "| LinkedIn" in line:
+                            title = line.replace(" | LinkedIn", "").strip()
+                        elif len(line) > 40 and "linkedin" not in line.lower() and "http" not in line.lower():
+                            snippet = line
 
-                    if not snippet:
-                        try:
-                            parent = el.locator("xpath=..").first
-                            sibling = parent.locator("xpath=following-sibling::*").first
-                            if sibling.count() > 0:
-                                snippet = sibling.inner_text().strip()[:200]
-                        except Exception:
-                            pass
+                    if not title:
+                        # Fallback: find any line with " - " that looks like a name+headline
+                        for line in lines:
+                            if " - " in line and "linkedin" not in line.lower() and "http" not in line.lower():
+                                title = line
+                                break
 
                     results.append({
                         "link": clean_href,
-                        "title": text if text else "",
+                        "title": title,
                         "snippet": snippet,
+                        "full_text": article_text[:500],
                     })
                 except Exception:
                     continue
@@ -204,11 +208,18 @@ def parse_linkedin_result(item: dict) -> LinkedInProfile | None:
             headline = re.sub(r"\s*LinkedIn\s*$", "", headline, flags=re.IGNORECASE).strip()
 
     location = None
+    search_text = snippet or item.get("full_text", "")
     loc_match = re.search(
-        r"(?:located?\s+in|based\s+in|from)\s+([A-Z][^.·\-|]+)",
-        snippet,
+        r"Location:\s*([^·\n]+)",
+        search_text,
         re.IGNORECASE,
     )
+    if not loc_match:
+        loc_match = re.search(
+            r"(?:located?\s+in|based\s+in|from)\s+([A-Z][^.·\-|\n]+)",
+            search_text,
+            re.IGNORECASE,
+        )
     if loc_match:
         location = loc_match.group(1).strip()
 

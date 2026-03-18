@@ -2,9 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.config import Settings, get_settings
 from app.models.schemas import SearchQuery, SearchResponse, SaveContactRequest
-from app.services.web_search import search_linkedin_profiles
-from app.services.profile_enricher import enrich_profiles
-from app.services.ai_scorer import score_profiles
+from app.services.multi_search import search_linkedin_profiles_multi
+from app.services.ai_scorer import score_merged_profiles
 from app.services.query_interpreter import interpret_query
 from app.services.notion_client import (
     save_contact_to_notion,
@@ -20,7 +19,7 @@ async def find_people(
     body: SearchQuery,
     settings: Settings = Depends(get_settings),
 ):
-    """Find LinkedIn profiles matching the search criteria."""
+    """Find LinkedIn profiles using multi-source parallel search."""
     try:
         interpreted = body
         if settings.groq_api_key:
@@ -30,7 +29,7 @@ async def find_people(
             except Exception as e:
                 print(f"Query interpretation failed, using raw query: {e}")
 
-        profiles, query_used = await search_linkedin_profiles(
+        merged_profiles, query_used = await search_linkedin_profiles_multi(
             query=interpreted.query,
             location=interpreted.location or body.location,
             companies=interpreted.companies or body.companies,
@@ -39,25 +38,20 @@ async def find_people(
             max_results=interpreted.max_results,
         )
 
-        if profiles:
-            # Enrich profiles by scraping public LinkedIn pages
-            enrichments = None
-            try:
-                print(f"Enriching {min(len(profiles), 10)} profiles...")
-                enrichments = await enrich_profiles(profiles, max_enrich=10)
-                enriched_count = sum(1 for e in enrichments if e.get("enriched"))
-                print(f"Successfully enriched {enriched_count}/{len(profiles)} profiles")
-            except Exception as e:
-                print(f"Profile enrichment failed, scoring with search data only: {e}")
-
-            # AI scoring with enriched data
+        profiles = []
+        if merged_profiles:
             if settings.groq_api_key:
                 try:
-                    profiles = await score_profiles(
-                        profiles, body.query, settings.groq_api_key, enrichments
+                    profiles = await score_merged_profiles(
+                        merged_profiles, body.query, settings.groq_api_key
                     )
                 except Exception as e:
                     print(f"AI scoring failed, returning unscored results: {e}")
+                    from app.services.ai_scorer import _merged_to_linkedin
+                    profiles = [_merged_to_linkedin(m) for m in merged_profiles]
+            else:
+                from app.services.ai_scorer import _merged_to_linkedin
+                profiles = [_merged_to_linkedin(m) for m in merged_profiles]
 
         return SearchResponse(
             query_used=query_used,
@@ -129,10 +123,10 @@ async def setup_guide():
     """Return setup instructions for required API keys."""
     return {
         "search": {
-            "description": "LinkedIn profile discovery via Playwright + Google",
+            "description": "Multi-source LinkedIn profile discovery (DDG + Bing + Google + Brave + LinkedIn public pages)",
             "steps": [
-                "No setup needed! Search uses a headless browser automatically.",
-                "Just start the backend and search.",
+                "No setup needed! Search uses headless browsers across 4 search engines automatically.",
+                "LinkedIn public profiles are fetched anonymously for richer data.",
             ],
             "free_tier": "Unlimited (no API key required)",
         },
@@ -156,6 +150,5 @@ async def setup_guide():
                 "4. Copy to .env as GROQ_API_KEY",
             ],
             "free_tier": "30 req/min, 1000 req/day, free forever",
-            "note": "The app works without this, but search results won't be scored or ranked",
         },
     }

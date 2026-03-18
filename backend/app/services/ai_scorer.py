@@ -26,10 +26,16 @@ Scoring criteria:
 Profiles:
 {profiles}
 
+Also classify each profile:
+3. "field": Pick the most relevant field from this list ONLY: "HEOR", "RWE", "Medical affairs", "Health Policy", "Neuroscience", "Genetic medicine", "Mental Health", "Multidisciplinary". Use null if none fit.
+4. "company_type": Pick from this list ONLY: "Biotech", "Biopharmaceutic", "Venture Capital", "Academia". Use null if none fit or unclear.
+
 Return a JSON object with a "scores" key containing an array. Each item must have:
 - "index": profile index (0-based)
 - "score": 0-100
 - "reason": 2-3 sentences explaining your reasoning, referencing specific details from their profile
+- "field": one of the field options above, or null
+- "company_type": one of the company type options above, or null
 
 Be direct and honest. If a profile doesn't seem relevant, say so and give a low score."""
 
@@ -112,6 +118,8 @@ async def score_profiles(
             if 0 <= idx < len(profiles):
                 profiles[idx].relevance_score = item.get("score", 0)
                 profiles[idx].relevance_reason = item.get("reason", "")
+                profiles[idx].field = item.get("field")
+                profiles[idx].company_type = item.get("company_type")
 
         profiles.sort(key=lambda p: p.relevance_score or 0, reverse=True)
 

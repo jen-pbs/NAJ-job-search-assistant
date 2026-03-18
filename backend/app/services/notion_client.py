@@ -93,10 +93,17 @@ async def save_contact_to_notion(
             "rich_text": [{"text": {"content": notes_text[:2000]}}]
         }
 
-    # Select (select) - field/domain like HEOR, RWE, etc.
-    if contact.domain:
-        properties["Select"] = {
-            "select": {"name": contact.domain}
+    # Field (select) - HEOR, RWE, Medical affairs, etc.
+    field_value = contact.field or contact.domain
+    if field_value:
+        properties["Field"] = {
+            "select": {"name": field_value}
+        }
+
+    # Company Type (select) - Biotech, Biopharmaceutic, etc.
+    if contact.company_type:
+        properties["Company Type"] = {
+            "select": {"name": contact.company_type}
         }
 
     page = await client.pages.create(

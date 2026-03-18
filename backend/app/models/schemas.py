@@ -28,6 +28,8 @@ class LinkedInProfile(BaseModel):
     snippet: str | None = None
     relevance_score: float | None = None
     relevance_reason: str | None = None
+    field: str | None = None
+    company_type: str | None = None
 
 
 class SearchResponse(BaseModel):
@@ -46,3 +48,5 @@ class SaveContactRequest(BaseModel):
     status: ContactStatus = ContactStatus.DISCOVERED
     notes: str | None = None
     domain: str | None = None
+    field: str | None = None
+    company_type: str | None = None

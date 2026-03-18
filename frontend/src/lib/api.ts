@@ -16,6 +16,8 @@ export interface LinkedInProfile {
   snippet: string | null;
   relevance_score: number | null;
   relevance_reason: string | null;
+  field: string | null;
+  company_type: string | null;
 }
 
 export interface SearchResponse {
@@ -33,6 +35,8 @@ export interface SaveContactRequest {
   relevance_reason?: string;
   status?: string;
   notes?: string;
+  field?: string;
+  company_type?: string;
 }
 
 export interface EventSearchQuery {

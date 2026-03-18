@@ -1,14 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface SearchBarProps {
   onSearch: (query: string) => void;
   isLoading: boolean;
+  placeholder?: string;
+  examples?: string[];
 }
 
-export default function SearchBar({ onSearch, isLoading }: SearchBarProps) {
+export default function SearchBar({ onSearch, isLoading, placeholder, examples }: SearchBarProps) {
   const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    setQuery("");
+  }, [placeholder]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -17,12 +23,11 @@ export default function SearchBar({ onSearch, isLoading }: SearchBarProps) {
     }
   };
 
-  const exampleQueries = [
+  const defaultExamples = [
     "HEOR researchers at large pharma companies",
     "Health economics analysts with consulting experience",
-    "Directors of outcomes research at Pfizer or Roche",
-    "People who transitioned from academia to HEOR",
   ];
+  const displayExamples = examples || defaultExamples;
 
   return (
     <div className="w-full max-w-3xl mx-auto">
@@ -32,7 +37,7 @@ export default function SearchBar({ onSearch, isLoading }: SearchBarProps) {
           <textarea
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Describe the people you want to connect with..."
+            placeholder={placeholder || "Search..."}
             className="w-full p-5 pr-28 text-sm border-0 focus:ring-0 resize-none bg-transparent text-slate-800 placeholder-slate-400 outline-none"
             rows={3}
             onKeyDown={(e) => {
@@ -65,7 +70,7 @@ export default function SearchBar({ onSearch, isLoading }: SearchBarProps) {
       </form>
 
       <div className="mt-4 flex flex-wrap gap-2 justify-center">
-        {exampleQueries.map((eq) => (
+        {displayExamples.map((eq) => (
           <button
             key={eq}
             onClick={() => setQuery(eq)}

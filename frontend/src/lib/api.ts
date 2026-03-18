@@ -35,6 +35,29 @@ export interface SaveContactRequest {
   notes?: string;
 }
 
+export interface EventSearchQuery {
+  query: string;
+  location?: string;
+  max_results?: number;
+}
+
+export interface Event {
+  title: string;
+  url: string;
+  date: string | null;
+  location: string | null;
+  source: string | null;
+  description: string | null;
+  relevance_score: number | null;
+  relevance_reason: string | null;
+}
+
+export interface EventSearchResponse {
+  query_used: string;
+  events: Event[];
+  total_found: number;
+}
+
 export interface HealthStatus {
   status: string;
   search_configured: boolean;
@@ -61,6 +84,19 @@ export async function findPeople(query: SearchQuery): Promise<SearchResponse> {
   return res.json();
 }
 
+export async function searchEvents(query: EventSearchQuery): Promise<EventSearchResponse> {
+  const res = await fetch(`${API_BASE}/api/events/search`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(query),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: "Event search failed" }));
+    throw new Error(error.detail || "Event search failed");
+  }
+  return res.json();
+}
+
 export async function saveContact(contact: SaveContactRequest): Promise<{ status: string; notion_page: { id: string; url: string } }> {
   const res = await fetch(`${API_BASE}/api/search/save-contact`, {
     method: "POST",
@@ -71,10 +107,5 @@ export async function saveContact(contact: SaveContactRequest): Promise<{ status
     const error = await res.json().catch(() => ({ detail: "Save failed" }));
     throw new Error(error.detail || "Failed to save contact");
   }
-  return res.json();
-}
-
-export async function getSetupGuide(): Promise<Record<string, unknown>> {
-  const res = await fetch(`${API_BASE}/api/search/setup-guide`);
   return res.json();
 }

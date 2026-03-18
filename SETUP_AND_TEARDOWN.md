@@ -28,15 +28,23 @@ npm run dev
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| People search | Working | DuckDuckGo search for LinkedIn profiles |
-| AI evaluation | Working | Groq scores + explains each profile match |
-| Profile enrichment | Working | DDG re-search for experience/education details |
+| Multi-source search | Working | DDG + Bing + Google + Brave in parallel (~10s) |
+| LinkedIn public pages | Working | Fetches og:title, experience, education (no login) |
+| Google Scholar enrichment | Working | Publications, citations, research topics |
+| ORCID enrichment | Working | Career timeline, employment history, education |
+| Open web enrichment | Working | Conference bios, press releases, Crunchbase profiles |
+| AI evaluation | Working | Groq scores + explains each profile match (name-validated) |
+| AI chat panel | Working | Draft outreach messages, interview questions per profile |
 | Notion save | Working | Saves Name, Role, Company, LinkedIn URL, Field, Company Type |
 | Events search | Working | 18 sources: ISPOR, ASHEcon, Eventbrite, Meetup, Biocom, etc. |
 | Free event filter | Working | Toggle to show only free events |
+| Loading animation | Working | Cute Lottie cat + rotating witty messages + field-targeted hints |
 | Job search | Placeholder | Tab exists, feature not yet built |
 | Welcome screen | Working | Asks for name, shows personalized greeting |
 | Rate limiter | Working | Max 10 searches/hour to avoid CAPTCHAs |
+| Cookie LinkedIn enrichment | Not built | Discussed, deferred until multi-source approach tested |
+| Google Calendar | Not built | For scheduling informational interviews |
+| GitHub push | Not done | For portfolio |
 
 ---
 

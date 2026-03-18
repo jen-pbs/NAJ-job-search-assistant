@@ -1,7 +1,42 @@
-# Job Search Assistant - Setup & Teardown Tracker
+# NAJ Search Assistant - Setup & Teardown Tracker
 
 Use this document to track everything you created for this project.
 When you no longer need the tool, follow the teardown steps to clean up.
+
+---
+
+## How to Start the App
+
+**Terminal 1 -- Backend:**
+```
+cd C:\Users\nxj561\Desktop\job-search-assistant\backend
+.venv\Scripts\activate
+uvicorn app.main:app --reload
+```
+
+**Terminal 2 -- Frontend:**
+```
+cd C:\Users\nxj561\Desktop\job-search-assistant\frontend
+npm run dev
+```
+
+**Then open:** http://localhost:3000
+
+---
+
+## What's Built
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| People search | Working | DuckDuckGo search for LinkedIn profiles |
+| AI evaluation | Working | Groq scores + explains each profile match |
+| Profile enrichment | Working | DDG re-search for experience/education details |
+| Notion save | Working | Saves Name, Role, Company, LinkedIn URL, Field, Company Type |
+| Events search | Working | 18 sources: ISPOR, ASHEcon, Eventbrite, Meetup, Biocom, etc. |
+| Free event filter | Working | Toggle to show only free events |
+| Job search | Placeholder | Tab exists, feature not yet built |
+| Welcome screen | Working | Asks for name, shows personalized greeting |
+| Rate limiter | Working | Max 10 searches/hour to avoid CAPTCHAs |
 
 ---
 
@@ -18,11 +53,12 @@ When you no longer need the tool, follow the teardown steps to clean up.
 - **Managed at:** https://www.notion.so/my-integrations
 - **Connected to page:** Informational interviews CA
 - **Database used:** "People contacted" (inline database)
+- **Columns mapped:** Name, Role, Company, LinkedIn (url), Field (select), Company Type (select)
 
 ### 3. Google Cloud Platform (TO BE DEACTIVATED)
 - **Project name:** Job-search-assistant
 - **Project ID:** job-search-assistant-490519
-- **Status:** API was deprecated by Google, no longer needed
+- **Status:** No longer needed (Google CSE deprecated)
 - **Billing account linked:** YES (credit card on file)
 - **ACTION REQUIRED:** Follow teardown steps below to remove billing
 
@@ -47,7 +83,7 @@ When you no longer need the tool, follow the teardown steps to clean up.
 
 | Service | Free Tier | Risk of charges |
 |---------|-----------|-----------------|
-| Playwright search | No API (free forever) | None |
+| DuckDuckGo search (Playwright) | No API (free forever) | None |
 | Groq API | 1000 req/day free | None - hard capped, no billing |
 | Notion API | Unlimited (free plan) | None |
 

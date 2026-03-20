@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from collections import deque
 from dataclasses import dataclass, field as dc_field
 
+import httpx
 from playwright.sync_api import sync_playwright, Browser, BrowserContext
 
 _executor = ThreadPoolExecutor(max_workers=5)
@@ -129,16 +130,16 @@ def _search_duckduckgo(query: str, max_results: int = 25) -> list[RawResult]:
         try:
             url = f"https://duckduckgo.com/?q={query.replace(' ', '+')}"
             page.goto(url, wait_until="domcontentloaded")
-            time.sleep(random.uniform(2.0, 3.5))
+            time.sleep(random.uniform(1.2, 2.0))
 
-            for _ in range(3):
+            for _ in range(2):
                 page.keyboard.press("End")
-                time.sleep(0.8)
+                time.sleep(0.5)
                 try:
                     more = page.locator("button:has-text('More results'), button:has-text('More Results'), a:has-text('More results')")
                     if more.count() > 0:
                         more.first.click()
-                        time.sleep(random.uniform(1.0, 2.0))
+                        time.sleep(random.uniform(0.8, 1.2))
                 except Exception:
                     pass
 
@@ -191,68 +192,59 @@ def _search_duckduckgo(query: str, max_results: int = 25) -> list[RawResult]:
 # Source: Bing
 # ---------------------------------------------------------------------------
 
-def _search_bing(query: str, max_results: int = 25) -> list[RawResult]:
+def _search_yahoo(query: str, max_results: int = 25) -> list[RawResult]:
+    """Yahoo Search (Bing-powered, supports site: operator reliably)."""
     results = []
     with sync_playwright() as p:
         browser, context = _create_browser_context(p)
         page = context.new_page()
         try:
-            # Remove site:linkedin.com/in if present (Bing doesn't handle it well)
-            # Just search for the query + "linkedin" to let Bing rank
-            clean_query = query.replace("site:linkedin.com/in", "").strip()
-            search_query = f"{clean_query} linkedin" if clean_query else "linkedin"
-            
-            url = f"https://www.bing.com/search?q={search_query.replace(' ', '+')}&count=50"
+            url = f"https://search.yahoo.com/search?p={query.replace(' ', '+')}&n=30"
             page.goto(url, wait_until="domcontentloaded")
-            time.sleep(random.uniform(2.5, 4.0))
+            time.sleep(random.uniform(1.5, 2.5))
 
-            for _ in range(2):
-                page.keyboard.press("End")
-                time.sleep(1.0)
-
-            # Look for LinkedIn results in the ol#b_results list
-            ol_results = page.locator("ol#b_results li")
+            all_links = page.locator("a[href*='linkedin.com/in/']")
             seen: set[str] = set()
-            result_count = ol_results.count()
 
-            for i in range(result_count):
+            for i in range(all_links.count()):
                 if len(results) >= max_results:
                     break
                 try:
-                    item = ol_results.nth(i)
-                    
-                    # Try to find LinkedIn links within this result item
-                    links = item.locator("a[href*='linkedin.com']")
-                    if links.count() == 0:
+                    link = all_links.nth(i)
+                    href = link.get_attribute("href") or ""
+                    # Yahoo wraps URLs via r.search.yahoo.com redirects
+                    li_match = re.search(r"https?://[a-z]{0,3}\.?linkedin\.com/in/[^?&#\s]+", href)
+                    if not li_match:
                         continue
-                    
-                    # Extract the first LinkedIn link
-                    for j in range(links.count()):
-                        href = links.nth(j).get_attribute("href") or ""
-                        li_url = _extract_linkedin_url(href)
-                        if li_url and _normalize_linkedin_url(li_url) not in seen:
-                            seen.add(_normalize_linkedin_url(li_url))
-                            
-                            title = links.nth(j).inner_text().strip()
-                            
-                            # Get snippet from result item
-                            snippet = ""
-                            full_text = item.inner_text().strip()
+                    li_url = re.sub(r"\?.*$", "", li_match.group(0))
+                    if _normalize_linkedin_url(li_url) in seen:
+                        continue
+                    seen.add(_normalize_linkedin_url(li_url))
+
+                    title = link.inner_text().strip()
+
+                    snippet = ""
+                    full_text = ""
+                    try:
+                        parent = link.locator("xpath=ancestor::div[contains(@class,'algo')]")
+                        if parent.count() > 0:
+                            full_text = parent.first.inner_text().strip()
                             for line in full_text.split("\n"):
                                 line = line.strip()
                                 if len(line) > 50 and "linkedin" not in line.lower() and "http" not in line.lower():
                                     snippet = line
                                     break
-                            
-                            results.append(RawResult(
-                                linkedin_url=li_url, title=title,
-                                snippet=snippet, full_text=full_text[:600], source="bing",
-                            ))
-                            break  # Found a LinkedIn link, move to next result
+                    except Exception:
+                        pass
+
+                    results.append(RawResult(
+                        linkedin_url=li_url, title=title,
+                        snippet=snippet, full_text=full_text[:600], source="yahoo",
+                    ))
                 except Exception:
                     continue
         except Exception as e:
-            print(f"[Bing] search error: {e}")
+            print(f"[Yahoo] search error: {e}")
         finally:
             browser.close()
     return results
@@ -262,63 +254,54 @@ def _search_bing(query: str, max_results: int = 25) -> list[RawResult]:
 # Source: Google
 # ---------------------------------------------------------------------------
 
-def _search_ecosia(query: str, max_results: int = 25) -> list[RawResult]:
-    """Search Ecosia (Bing-backed, no CAPTCHAs). Replaces Google."""
+def _search_startpage(query: str, max_results: int = 25) -> list[RawResult]:
+    """Startpage (Google proxy, no CAPTCHAs, no tracking)."""
     results = []
     with sync_playwright() as p:
         browser, context = _create_browser_context(p)
         page = context.new_page()
         try:
-            # Remove site syntax for Ecosia
-            clean_query = query.replace("site:linkedin.com/in", "").strip()
-            search_query = f"{clean_query} linkedin" if clean_query else "linkedin"
-            
-            url = f"https://www.ecosia.org/search?q={search_query.replace(' ', '+')}"
+            url = f"https://www.startpage.com/do/dsearch?query={query.replace(' ', '+')}"
             page.goto(url, wait_until="domcontentloaded")
-            time.sleep(random.uniform(2.0, 3.5))
+            time.sleep(random.uniform(1.5, 2.5))
 
-            # Ecosia uses similar DOM structure to Bing
-            results_container = page.locator("section.results")
-            if results_container.count() == 0:
-                return results
-
-            items = page.locator("article")
+            # Startpage uses article or section.result containers
+            items = page.locator("article, section.result, div.result")
             seen: set[str] = set()
-            
+
             for i in range(items.count()):
                 if len(results) >= max_results:
                     break
                 try:
                     item = items.nth(i)
-                    links = item.locator("a[href*='linkedin.com']")
-                    if links.count() == 0:
+                    link_el = item.locator("a[href*='linkedin.com/in/']").first
+                    if link_el.count() == 0:
                         continue
-                    
-                    for j in range(links.count()):
-                        href = links.nth(j).get_attribute("href") or ""
-                        li_url = _extract_linkedin_url(href)
-                        if li_url and _normalize_linkedin_url(li_url) not in seen:
-                            seen.add(_normalize_linkedin_url(li_url))
-                            
-                            title = links.nth(j).inner_text().strip()
-                            
-                            snippet = ""
-                            full_text = item.inner_text().strip()
-                            for line in full_text.split("\n"):
-                                line = line.strip()
-                                if len(line) > 50 and "linkedin" not in line.lower() and "http" not in line.lower():
-                                    snippet = line
-                                    break
-                            
-                            results.append(RawResult(
-                                linkedin_url=li_url, title=title,
-                                snippet=snippet, full_text=full_text[:600], source="ecosia",
-                            ))
+                    href = link_el.get_attribute("href") or ""
+                    li_url = _extract_linkedin_url(href)
+                    if not li_url or _normalize_linkedin_url(li_url) in seen:
+                        continue
+                    seen.add(_normalize_linkedin_url(li_url))
+
+                    title_el = item.locator("h2, h3").first
+                    title = title_el.inner_text().strip() if title_el.count() > 0 else ""
+
+                    snippet = ""
+                    full_text = item.inner_text().strip()
+                    for line in full_text.split("\n"):
+                        line = line.strip()
+                        if len(line) > 50 and "linkedin" not in line.lower() and "http" not in line.lower():
+                            snippet = line
                             break
+
+                    results.append(RawResult(
+                        linkedin_url=li_url, title=title,
+                        snippet=snippet, full_text=full_text[:600], source="startpage",
+                    ))
                 except Exception:
                     continue
         except Exception as e:
-            print(f"[Ecosia] search error: {e}")
+            print(f"[Startpage] search error: {e}")
         finally:
             browser.close()
     return results
@@ -336,7 +319,13 @@ def _search_brave(query: str, max_results: int = 25) -> list[RawResult]:
         try:
             url = f"https://search.brave.com/search?q={query.replace(' ', '+')}"
             page.goto(url, wait_until="domcontentloaded")
-            time.sleep(random.uniform(2.0, 3.5))
+            time.sleep(random.uniform(2.0, 3.0))
+
+            # Check for CAPTCHA
+            if "captcha" in page.title().lower() or "not a robot" in page.content()[:500].lower():
+                print("[Brave] CAPTCHA detected, skipping")
+                browser.close()
+                return results
 
             # Brave uses #results with various child elements
             # Try broad selector to catch all result items
@@ -398,82 +387,72 @@ def _search_brave(query: str, max_results: int = 25) -> list[RawResult]:
 # LinkedIn Public Profile Fetcher (no login required)
 # ---------------------------------------------------------------------------
 
-def _fetch_linkedin_public_pages(urls: list[str]) -> dict[str, dict]:
-    """Visit LinkedIn public profile pages without login using parallel tabs.
-    Returns whatever LinkedIn shows to anonymous visitors: name, headline,
-    current position, location, and sometimes truncated experience list.
-    Zero risk -- this is the same page Google/Bing crawlers see.
-    """
+def _fetch_linkedin_chunk(urls: list[str]) -> dict[str, dict]:
+    """Fetch a chunk of LinkedIn pages in one browser instance."""
     data: dict[str, dict] = {}
     if not urls:
         return data
 
-    BATCH_SIZE = 5
-
     with sync_playwright() as p:
         browser, context = _create_browser_context(p)
+        context.route("**/*.{png,jpg,jpeg,gif,svg,css,woff,woff2,ttf,eot,mp4,webm,ico}", lambda route: route.abort())
+        context.route("**/analytics/**", lambda route: route.abort())
+        context.route("**/tracking/**", lambda route: route.abort())
 
-        for batch_start in range(0, len(urls), BATCH_SIZE):
-            batch = urls[batch_start:batch_start + BATCH_SIZE]
-            pages = []
+        for url in urls:
+            try:
+                page = context.new_page()
+                page.goto(url, wait_until="domcontentloaded", timeout=5000)
 
-            # Open all pages in batch simultaneously
-            for url in batch:
-                try:
-                    page = context.new_page()
-                    page.goto(url, wait_until="domcontentloaded", timeout=10000)
-                    pages.append((url, page))
-                except Exception as e:
-                    print(f"[LinkedIn Public] nav failed for {url}: {e}")
-                    continue
+                page_data: dict = {}
 
-            time.sleep(random.uniform(1.5, 2.5))
+                og_title = page.locator('meta[property="og:title"]').first
+                if og_title.count() > 0:
+                    page_data["og_title"] = og_title.get_attribute("content") or ""
 
-            # Extract data from all loaded pages
-            for url, page in pages:
-                try:
-                    page_data: dict = {}
+                og_desc = page.locator('meta[property="og:description"]').first
+                if og_desc.count() > 0:
+                    page_data["og_description"] = og_desc.get_attribute("content") or ""
 
-                    og_title = page.locator('meta[property="og:title"]').first
-                    if og_title.count() > 0:
-                        page_data["og_title"] = og_title.get_attribute("content") or ""
+                meta_desc = page.locator('meta[name="description"]').first
+                if meta_desc.count() > 0:
+                    page_data["meta_description"] = meta_desc.get_attribute("content") or ""
 
-                    og_desc = page.locator('meta[property="og:description"]').first
-                    if og_desc.count() > 0:
-                        page_data["og_description"] = og_desc.get_attribute("content") or ""
+                if page_data:
+                    data[_normalize_linkedin_url(url)] = page_data
 
-                    meta_desc = page.locator('meta[name="description"]').first
-                    if meta_desc.count() > 0:
-                        page_data["meta_description"] = meta_desc.get_attribute("content") or ""
-
-                    try:
-                        main_content = page.locator("main, .scaffold-layout__main, section.top-card-layout")
-                        if main_content.count() > 0:
-                            visible_text = main_content.first.inner_text(timeout=3000)
-                            if visible_text and len(visible_text) > 20:
-                                page_data["visible_text"] = visible_text[:1200]
-                    except Exception:
-                        pass
-
-                    try:
-                        body_text = page.locator("body").inner_text(timeout=3000)
-                        if body_text and len(body_text) > 50:
-                            page_data["body_text"] = body_text[:1500]
-                    except Exception:
-                        pass
-
-                    if page_data:
-                        data[_normalize_linkedin_url(url)] = page_data
-
-                except Exception as e:
-                    print(f"[LinkedIn Public] extract failed for {url}: {e}")
-
+                page.close()
+            except Exception:
                 try:
                     page.close()
                 except Exception:
                     pass
 
         browser.close()
+    return data
+
+
+def _fetch_linkedin_public_pages(urls: list[str]) -> dict[str, dict]:
+    """Fetch LinkedIn public profile pages using parallel browser instances.
+    Splits URLs across multiple threads, each with its own browser.
+    """
+    if not urls:
+        return {}
+
+    NUM_WORKERS = 4
+    chunk_size = max(1, len(urls) // NUM_WORKERS + 1)
+    chunks = [urls[i:i + chunk_size] for i in range(0, len(urls), chunk_size)]
+
+    data: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=NUM_WORKERS) as pool:
+        futures = [pool.submit(_fetch_linkedin_chunk, chunk) for chunk in chunks]
+        for future in futures:
+            try:
+                chunk_data = future.result(timeout=30)
+                data.update(chunk_data)
+            except Exception:
+                continue
+
     return data
 
 
@@ -785,25 +764,26 @@ async def search_linkedin_profiles_multi(
     # Each source gets the same primary query for consistency
     loop = asyncio.get_event_loop()
 
-    print(f"[MultiSearch] Launching parallel searches across 3 engines...")
+    print(f"[MultiSearch] Launching parallel searches across 4 engines...")
     start_time = time.time()
 
-    # Run 3 search engines in parallel
-    # (DDG + Ecosia + Brave - removed Bing & Google due to poor LinkedIn profile ranking)
+    # Run all 4 search engines in parallel
+    # DDG + Startpage (Google proxy) + Yahoo (Bing-powered) + Brave (fallback)
     ddg_future = loop.run_in_executor(_executor, _search_duckduckgo, primary_query, max_results)
-    ecosia_future = loop.run_in_executor(_executor, _search_ecosia, primary_query, max_results)
+    startpage_future = loop.run_in_executor(_executor, _search_startpage, primary_query, max_results)
+    yahoo_future = loop.run_in_executor(_executor, _search_yahoo, primary_query, max_results)
     brave_future = loop.run_in_executor(_executor, _search_brave, primary_query, max_results)
 
     # Wait for all to complete (or fail gracefully)
-    ddg_results, ecosia_results, brave_results = await asyncio.gather(
-        ddg_future, ecosia_future, brave_future,
+    ddg_results, startpage_results, yahoo_results, brave_results = await asyncio.gather(
+        ddg_future, startpage_future, yahoo_future, brave_future,
         return_exceptions=True,
     )
 
     # Handle any exceptions from individual engines
     all_source_results: list[list[RawResult]] = []
-    for name, result in [("DDG", ddg_results), ("Ecosia", ecosia_results),
-                         ("Brave", brave_results)]:
+    for name, result in [("DDG", ddg_results), ("Startpage", startpage_results),
+                         ("Yahoo", yahoo_results), ("Brave", brave_results)]:
         if isinstance(result, Exception):
             print(f"[MultiSearch] {name} failed: {result}")
             all_source_results.append([])
@@ -832,9 +812,9 @@ async def search_linkedin_profiles_multi(
             all_urls.add(r.linkedin_url)
 
     # Fetch LinkedIn public pages (no login) for richer data
-    print(f"[MultiSearch] Fetching {len(all_urls)} LinkedIn public pages (no login)...")
+    url_list = list(all_urls)[:max_results]
+    print(f"[MultiSearch] Fetching {len(url_list)} LinkedIn public pages (no login)...")
     public_start = time.time()
-    url_list = list(all_urls)[:max_results + 10]
     public_pages = await loop.run_in_executor(_executor, _fetch_linkedin_public_pages, url_list)
     public_elapsed = time.time() - public_start
     print(f"[MultiSearch] Public pages fetched in {public_elapsed:.1f}s, got data for {len(public_pages)}")

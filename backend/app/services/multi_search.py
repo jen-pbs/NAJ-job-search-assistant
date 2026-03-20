@@ -123,12 +123,14 @@ def _create_browser_context(playwright_instance) -> tuple:
 # ---------------------------------------------------------------------------
 
 def _search_duckduckgo(query: str, max_results: int = 25) -> list[RawResult]:
+    import urllib.parse
     results = []
     with sync_playwright() as p:
         browser, context = _create_browser_context(p)
         page = context.new_page()
         try:
-            url = f"https://duckduckgo.com/?q={query.replace(' ', '+')}"
+            encoded = urllib.parse.quote_plus(query)
+            url = f"https://duckduckgo.com/?q={encoded}"
             page.goto(url, wait_until="domcontentloaded")
             time.sleep(random.uniform(1.2, 2.0))
 
@@ -192,15 +194,17 @@ def _search_duckduckgo(query: str, max_results: int = 25) -> list[RawResult]:
 # Source: Bing
 # ---------------------------------------------------------------------------
 
-def _search_yahoo(query: str, max_results: int = 25) -> list[RawResult]:
-    """Yahoo Search (Bing-powered, supports site: operator reliably)."""
+def _search_aol(query: str, max_results: int = 25) -> list[RawResult]:
+    """AOL Search (Yahoo/Bing-powered, different IP treatment than Yahoo direct)."""
+    import urllib.parse
     results = []
     with sync_playwright() as p:
         browser, context = _create_browser_context(p)
         page = context.new_page()
         try:
-            url = f"https://search.yahoo.com/search?p={query.replace(' ', '+')}&n=30"
-            page.goto(url, wait_until="domcontentloaded")
+            encoded = urllib.parse.quote_plus(query)
+            url = f"https://search.aol.com/aol/search?q={encoded}&s=a&n=30"
+            page.goto(url, wait_until="domcontentloaded", timeout=12000)
             time.sleep(random.uniform(1.5, 2.5))
 
             all_links = page.locator("a[href*='linkedin.com/in/']")
@@ -212,7 +216,6 @@ def _search_yahoo(query: str, max_results: int = 25) -> list[RawResult]:
                 try:
                     link = all_links.nth(i)
                     href = link.get_attribute("href") or ""
-                    # Yahoo wraps URLs via r.search.yahoo.com redirects
                     li_match = re.search(r"https?://[a-z]{0,3}\.?linkedin\.com/in/[^?&#\s]+", href)
                     if not li_match:
                         continue
@@ -222,11 +225,10 @@ def _search_yahoo(query: str, max_results: int = 25) -> list[RawResult]:
                     seen.add(_normalize_linkedin_url(li_url))
 
                     title = link.inner_text().strip()
-
                     snippet = ""
                     full_text = ""
                     try:
-                        parent = link.locator("xpath=ancestor::div[contains(@class,'algo')]")
+                        parent = link.locator("xpath=ancestor::div[contains(@class,'algo') or contains(@class,'result')]")
                         if parent.count() > 0:
                             full_text = parent.first.inner_text().strip()
                             for line in full_text.split("\n"):
@@ -239,12 +241,12 @@ def _search_yahoo(query: str, max_results: int = 25) -> list[RawResult]:
 
                     results.append(RawResult(
                         linkedin_url=li_url, title=title,
-                        snippet=snippet, full_text=full_text[:600], source="yahoo",
+                        snippet=snippet, full_text=full_text[:600], source="aol",
                     ))
                 except Exception:
                     continue
         except Exception as e:
-            print(f"[Yahoo] search error: {e}")
+            print(f"[AOL] search error: {e}")
         finally:
             browser.close()
     return results
@@ -256,12 +258,14 @@ def _search_yahoo(query: str, max_results: int = 25) -> list[RawResult]:
 
 def _search_startpage(query: str, max_results: int = 25) -> list[RawResult]:
     """Startpage (Google proxy, no CAPTCHAs, no tracking)."""
+    import urllib.parse
     results = []
     with sync_playwright() as p:
         browser, context = _create_browser_context(p)
         page = context.new_page()
         try:
-            url = f"https://www.startpage.com/do/dsearch?query={query.replace(' ', '+')}"
+            encoded = urllib.parse.quote_plus(query)
+            url = f"https://www.startpage.com/do/dsearch?query={encoded}"
             page.goto(url, wait_until="domcontentloaded")
             time.sleep(random.uniform(1.5, 2.5))
 
@@ -768,22 +772,22 @@ async def search_linkedin_profiles_multi(
     start_time = time.time()
 
     # Run all 4 search engines in parallel
-    # DDG + Startpage (Google proxy) + Yahoo (Bing-powered) + Brave (fallback)
+    # DDG + Startpage (Google proxy) + AOL (Yahoo/Bing-powered) + Brave (fallback)
     ddg_future = loop.run_in_executor(_executor, _search_duckduckgo, primary_query, max_results)
     startpage_future = loop.run_in_executor(_executor, _search_startpage, primary_query, max_results)
-    yahoo_future = loop.run_in_executor(_executor, _search_yahoo, primary_query, max_results)
+    aol_future = loop.run_in_executor(_executor, _search_aol, primary_query, max_results)
     brave_future = loop.run_in_executor(_executor, _search_brave, primary_query, max_results)
 
     # Wait for all to complete (or fail gracefully)
-    ddg_results, startpage_results, yahoo_results, brave_results = await asyncio.gather(
-        ddg_future, startpage_future, yahoo_future, brave_future,
+    ddg_results, startpage_results, aol_results, brave_results = await asyncio.gather(
+        ddg_future, startpage_future, aol_future, brave_future,
         return_exceptions=True,
     )
 
     # Handle any exceptions from individual engines
     all_source_results: list[list[RawResult]] = []
     for name, result in [("DDG", ddg_results), ("Startpage", startpage_results),
-                         ("Yahoo", yahoo_results), ("Brave", brave_results)]:
+                         ("AOL", aol_results), ("Brave", brave_results)]:
         if isinstance(result, Exception):
             print(f"[MultiSearch] {name} failed: {result}")
             all_source_results.append([])
@@ -791,19 +795,23 @@ async def search_linkedin_profiles_multi(
             print(f"[MultiSearch] {name}: {len(result)} results")
             all_source_results.append(result)
 
-    # If we have alternative terms and few results, run additional DDG searches
-    total_raw = sum(len(r) for r in all_source_results)
-    if total_raw < 10 and alternative_terms:
-        print(f"[MultiSearch] Only {total_raw} results, trying alternative terms...")
-        for alt in alternative_terms[:2]:
-            alt_q = build_search_queries(alt, location, companies, seniority)[0]
-            alt_results = await loop.run_in_executor(_executor, _search_duckduckgo, alt_q, 15)
-            if not isinstance(alt_results, Exception):
-                all_source_results.append(alt_results)
-                print(f"[MultiSearch] Alt term '{alt[:30]}': {len(alt_results)} results")
-
     elapsed = time.time() - start_time
     print(f"[MultiSearch] All searches completed in {elapsed:.1f}s")
+
+    # Always run alternative term searches in parallel to get more diverse results
+    # This compensates for engines that may be blocked and widens the net
+    if alternative_terms:
+        alt_futures = []
+        for alt in alternative_terms[:2]:
+            alt_q = build_search_queries(alt, location, companies, seniority)[0]
+            alt_futures.append(loop.run_in_executor(_executor, _search_duckduckgo, alt_q, 15))
+            alt_futures.append(loop.run_in_executor(_executor, _search_aol, alt_q, 10))
+
+        alt_results_list = await asyncio.gather(*alt_futures, return_exceptions=True)
+        for i, alt_r in enumerate(alt_results_list):
+            if not isinstance(alt_r, Exception) and alt_r:
+                all_source_results.append(alt_r)
+                print(f"[MultiSearch] Alt search #{i+1}: {len(alt_r)} results")
 
     # Collect all unique LinkedIn URLs for public page fetching
     all_urls: set[str] = set()

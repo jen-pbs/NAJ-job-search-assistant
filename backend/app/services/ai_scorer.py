@@ -7,45 +7,42 @@ from app.models.schemas import LinkedInProfile
 from app.services.multi_search import MergedProfile
 
 
-SCORING_PROMPT = """You are an expert networking advisor. The user is exploring career opportunities and wants to find the best people for informational interviews.
+SCORING_PROMPT = """You are an expert networking advisor helping a user find people for informational interviews.
 
-User's search intent: "{query}"
+USER'S EXACT SEARCH QUERY: "{query}"
 
-Below are LinkedIn profiles found via search. For each person, I've combined data from multiple sources (search engines + their public LinkedIn page). Some profiles have rich data, others only have a name and headline.
+Read the user's query carefully. Extract their specific requirements:
+- What field or role are they interested in? (e.g. HEOR, health economics, RWE)
+- What background or career path are they looking for? (e.g. transitioned from academia, PhD background, came from consulting)
+- What location, if any? (e.g. San Francisco Bay area)
+- What seniority or company type? (e.g. director level, pharma, biotech)
 
-Your job:
-1. Score each profile 0-100 for how valuable an informational interview with them would be
-2. Write 2-3 sentences explaining WHY this person is or isn't a good match. Be specific -- reference their actual experience, role transitions, companies, or skills.
+These specific requirements MUST drive your scoring. A profile that meets the user's specific criteria scores high. One that is in the right field but misses the key criteria (e.g. has no academic background when the user asked for academia-to-industry transitions) scores lower.
 
-Scoring criteria:
-- Role relevance: Does their work relate to what the user is looking for?
-- Experience depth: Do they have meaningful experience to share insights about the field?
-- Approachability: Mid-career professionals and those with diverse paths are often most helpful
-- Career path: Did they transition into this field? That perspective is especially valuable.
-- Company diversity: Experience at well-known companies or in relevant industries adds value
-
-Profiles:
+Profiles to evaluate:
 {profiles}
 
-Also extract and classify each profile:
-3. "company": The person's current company name. Extract it from their headline, experience, or description. Just the company name, nothing else. Use null only if truly unknown.
-4. "role": Their current job title/role. Extract from headline or experience. Use null only if unknown.
-5. "field": Pick the most relevant field from this list ONLY: "HEOR", "RWE", "Medical affairs", "Health Policy", "Neuroscience", "Genetic medicine", "Mental Health", "Multidisciplinary". Use null if none fit.
-6. "company_type": Pick from this list ONLY: "Biotech", "Biopharmaceutic", "Venture Capital", "Academia". Use null if none fit or unclear.
+For each profile:
+1. Score 0-100 based on how well they match the user's SPECIFIC query (not just general field relevance)
+2. Write 2-3 sentences explaining the match. Be explicit: does this person meet the specific requirements in the query? If the user asked for people who transitioned from academia, say whether this person did. If a location was specified, say whether they're in it. Reference actual details from their profile.
 
-Return a JSON object with a "scores" key containing an array. Each item MUST have:
-- "index": profile index (0-based) -- MUST match the profile number exactly
-- "name": the person's full name (copy it exactly from the profile) -- this is used to verify correct matching
+Also extract:
+3. "company": current company name. Null only if truly unknown.
+4. "role": current job title. Null only if unknown.
+5. "field": one of: "HEOR", "RWE", "Medical affairs", "Health Policy", "Neuroscience", "Genetic medicine", "Mental Health", "Multidisciplinary". Null if none fit.
+6. "company_type": one of: "Biotech", "Biopharmaceutic", "Venture Capital", "Academia". Null if none fit.
+
+Return a JSON object with a "scores" array. Each item MUST have:
+- "index": 0-based profile index
+- "name": person's full name (copied exactly)
 - "score": 0-100
-- "reason": 2-3 sentences about THIS SPECIFIC PERSON. Start the reason with their name. Reference details from THEIR profile only, not other profiles.
-- "company": extracted company name or null
-- "role": extracted job title or null
-- "field": one of the field options above, or null
-- "company_type": one of the company type options above, or null
+- "reason": 2-3 sentences. Start with the person's name. Explicitly address whether they meet the user's specific criteria.
+- "company": extracted company or null
+- "role": extracted title or null
+- "field": field classification or null
+- "company_type": company type or null
 
-CRITICAL: Do NOT mix up profiles. Each item's reason must describe the person at that index. Start each reason with the person's name to prevent confusion.
-
-Be direct and honest. If a profile doesn't seem relevant, say so and give a low score."""
+CRITICAL: Do NOT mix up profiles. Start each reason with the person's name."""
 
 
 def _apply_scores(profiles: list[LinkedInProfile], scores: list[dict]) -> list[LinkedInProfile]:

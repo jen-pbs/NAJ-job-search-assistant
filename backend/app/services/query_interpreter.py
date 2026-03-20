@@ -8,16 +8,16 @@ from app.models.schemas import SearchQuery
 
 INTERPRET_PROMPT = """You are a search query interpreter. The user wants to find people on LinkedIn for informational interviews.
 
-Given a natural language query, extract structured search parameters.
+Given a natural language query, extract structured search parameters for a LinkedIn site: search.
 
 User query: "{query}"
 
 Return a JSON object with:
-- "search_terms": the core role/field terms to search for (e.g. "HEOR", "health economics outcomes research")
-- "location": geographic location if mentioned, or null
-- "companies": list of company names if mentioned, or null
+- "search_terms": the core role/field terms that will find relevant LinkedIn profiles via search engine. Include background context if searchable (e.g. if user wants people who transitioned from academia, include "PhD" or "postdoc" or "research" alongside the field). Keep it to 3-6 words max.
+- "location": geographic location if mentioned (city, region, or country), or null
+- "companies": list of specific company names if mentioned, or null
 - "seniority": seniority level if mentioned (e.g. "Senior", "Director", "VP"), or null
-- "alternative_terms": list of 2-3 alternative phrasings for the search terms that would find similar people
+- "alternative_terms": list of 2-3 alternative search phrasings that would find similar people. If the user asked for a career transition (e.g. academia to industry), include alternatives that capture that (e.g. "postdoc HEOR", "PhD health economics industry").
 
 Return ONLY the JSON object."""
 

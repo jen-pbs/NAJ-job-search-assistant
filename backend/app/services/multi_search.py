@@ -197,7 +197,12 @@ def _search_bing(query: str, max_results: int = 25) -> list[RawResult]:
         browser, context = _create_browser_context(p)
         page = context.new_page()
         try:
-            url = f"https://www.bing.com/search?q={query.replace(' ', '+')}&count=30"
+            # Remove site:linkedin.com/in if present (Bing doesn't handle it well)
+            # Just search for the query + "linkedin" to let Bing rank
+            clean_query = query.replace("site:linkedin.com/in", "").strip()
+            search_query = f"{clean_query} linkedin" if clean_query else "linkedin"
+            
+            url = f"https://www.bing.com/search?q={search_query.replace(' ', '+')}&count=50"
             page.goto(url, wait_until="domcontentloaded")
             time.sleep(random.uniform(2.5, 4.0))
 
@@ -205,44 +210,45 @@ def _search_bing(query: str, max_results: int = 25) -> list[RawResult]:
                 page.keyboard.press("End")
                 time.sleep(1.0)
 
-            # Extract all links from the page that point to LinkedIn profiles
-            all_links = page.locator("a[href*='linkedin.com/in/']")
+            # Look for LinkedIn results in the ol#b_results list
+            ol_results = page.locator("ol#b_results li")
             seen: set[str] = set()
-            link_count = all_links.count()
+            result_count = ol_results.count()
 
-            for i in range(link_count):
+            for i in range(result_count):
                 if len(results) >= max_results:
                     break
                 try:
-                    link = all_links.nth(i)
-                    href = link.get_attribute("href") or ""
-                    li_url = _extract_linkedin_url(href)
-                    if not li_url or _normalize_linkedin_url(li_url) in seen:
+                    item = ol_results.nth(i)
+                    
+                    # Try to find LinkedIn links within this result item
+                    links = item.locator("a[href*='linkedin.com']")
+                    if links.count() == 0:
                         continue
-                    seen.add(_normalize_linkedin_url(li_url))
-
-                    # Walk up to the containing result element
-                    title = link.inner_text().strip()
-
-                    # Try to get the parent container's text for snippet
-                    snippet = ""
-                    full_text = ""
-                    try:
-                        parent = page.locator(f"li:has(a[href*='{li_url.split('/in/')[1]}'])")
-                        if parent.count() > 0:
-                            full_text = parent.first.inner_text().strip()
+                    
+                    # Extract the first LinkedIn link
+                    for j in range(links.count()):
+                        href = links.nth(j).get_attribute("href") or ""
+                        li_url = _extract_linkedin_url(href)
+                        if li_url and _normalize_linkedin_url(li_url) not in seen:
+                            seen.add(_normalize_linkedin_url(li_url))
+                            
+                            title = links.nth(j).inner_text().strip()
+                            
+                            # Get snippet from result item
+                            snippet = ""
+                            full_text = item.inner_text().strip()
                             for line in full_text.split("\n"):
                                 line = line.strip()
                                 if len(line) > 50 and "linkedin" not in line.lower() and "http" not in line.lower():
                                     snippet = line
                                     break
-                    except Exception:
-                        pass
-
-                    results.append(RawResult(
-                        linkedin_url=li_url, title=title,
-                        snippet=snippet, full_text=full_text[:600], source="bing",
-                    ))
+                            
+                            results.append(RawResult(
+                                linkedin_url=li_url, title=title,
+                                snippet=snippet, full_text=full_text[:600], source="bing",
+                            ))
+                            break  # Found a LinkedIn link, move to next result
                 except Exception:
                     continue
         except Exception as e:
@@ -256,56 +262,63 @@ def _search_bing(query: str, max_results: int = 25) -> list[RawResult]:
 # Source: Google
 # ---------------------------------------------------------------------------
 
-def _search_google(query: str, max_results: int = 25) -> list[RawResult]:
+def _search_ecosia(query: str, max_results: int = 25) -> list[RawResult]:
+    """Search Ecosia (Bing-backed, no CAPTCHAs). Replaces Google."""
     results = []
     with sync_playwright() as p:
         browser, context = _create_browser_context(p)
         page = context.new_page()
         try:
-            url = f"https://www.google.com/search?q={query.replace(' ', '+')}&num=30"
+            # Remove site syntax for Ecosia
+            clean_query = query.replace("site:linkedin.com/in", "").strip()
+            search_query = f"{clean_query} linkedin" if clean_query else "linkedin"
+            
+            url = f"https://www.ecosia.org/search?q={search_query.replace(' ', '+')}"
             page.goto(url, wait_until="domcontentloaded")
-            time.sleep(random.uniform(2.0, 4.0))
+            time.sleep(random.uniform(2.0, 3.5))
 
-            # Check for CAPTCHA
-            content = page.content()
-            if "captcha" in content.lower() or "unusual traffic" in content.lower():
-                print("[Google] CAPTCHA detected, skipping")
-                browser.close()
+            # Ecosia uses similar DOM structure to Bing
+            results_container = page.locator("section.results")
+            if results_container.count() == 0:
                 return results
 
-            items = page.locator("div.g, div[data-sokoban-container]")
+            items = page.locator("article")
             seen: set[str] = set()
+            
             for i in range(items.count()):
                 if len(results) >= max_results:
                     break
                 try:
                     item = items.nth(i)
-                    link_el = item.locator("a[href*='linkedin.com/in/']").first
-                    if link_el.count() == 0:
+                    links = item.locator("a[href*='linkedin.com']")
+                    if links.count() == 0:
                         continue
-                    href = link_el.get_attribute("href") or ""
-                    li_url = _extract_linkedin_url(href)
-                    if not li_url or _normalize_linkedin_url(li_url) in seen:
-                        continue
-                    seen.add(_normalize_linkedin_url(li_url))
-
-                    title_el = item.locator("h3").first
-                    title = title_el.inner_text().strip() if title_el.count() > 0 else ""
-
-                    snippet_el = item.locator("div[data-sncf], div.VwiC3b, span.aCOpRe, div[style*='-webkit-line-clamp']")
-                    snippet = ""
-                    if snippet_el.count() > 0:
-                        snippet = snippet_el.first.inner_text().strip()
-
-                    full_text = item.inner_text().strip()
-                    results.append(RawResult(
-                        linkedin_url=li_url, title=title,
-                        snippet=snippet, full_text=full_text[:600], source="google",
-                    ))
+                    
+                    for j in range(links.count()):
+                        href = links.nth(j).get_attribute("href") or ""
+                        li_url = _extract_linkedin_url(href)
+                        if li_url and _normalize_linkedin_url(li_url) not in seen:
+                            seen.add(_normalize_linkedin_url(li_url))
+                            
+                            title = links.nth(j).inner_text().strip()
+                            
+                            snippet = ""
+                            full_text = item.inner_text().strip()
+                            for line in full_text.split("\n"):
+                                line = line.strip()
+                                if len(line) > 50 and "linkedin" not in line.lower() and "http" not in line.lower():
+                                    snippet = line
+                                    break
+                            
+                            results.append(RawResult(
+                                linkedin_url=li_url, title=title,
+                                snippet=snippet, full_text=full_text[:600], source="ecosia",
+                            ))
+                            break
                 except Exception:
                     continue
         except Exception as e:
-            print(f"[Google] search error: {e}")
+            print(f"[Ecosia] search error: {e}")
         finally:
             browser.close()
     return results
@@ -772,25 +785,25 @@ async def search_linkedin_profiles_multi(
     # Each source gets the same primary query for consistency
     loop = asyncio.get_event_loop()
 
-    print(f"[MultiSearch] Launching parallel searches across 4 engines...")
+    print(f"[MultiSearch] Launching parallel searches across 3 engines...")
     start_time = time.time()
 
-    # Run all 4 search engines in parallel
+    # Run 3 search engines in parallel
+    # (DDG + Ecosia + Brave - removed Bing & Google due to poor LinkedIn profile ranking)
     ddg_future = loop.run_in_executor(_executor, _search_duckduckgo, primary_query, max_results)
-    bing_future = loop.run_in_executor(_executor, _search_bing, primary_query, max_results)
-    google_future = loop.run_in_executor(_executor, _search_google, primary_query, max_results)
+    ecosia_future = loop.run_in_executor(_executor, _search_ecosia, primary_query, max_results)
     brave_future = loop.run_in_executor(_executor, _search_brave, primary_query, max_results)
 
     # Wait for all to complete (or fail gracefully)
-    ddg_results, bing_results, google_results, brave_results = await asyncio.gather(
-        ddg_future, bing_future, google_future, brave_future,
+    ddg_results, ecosia_results, brave_results = await asyncio.gather(
+        ddg_future, ecosia_future, brave_future,
         return_exceptions=True,
     )
 
     # Handle any exceptions from individual engines
     all_source_results: list[list[RawResult]] = []
-    for name, result in [("DDG", ddg_results), ("Bing", bing_results),
-                         ("Google", google_results), ("Brave", brave_results)]:
+    for name, result in [("DDG", ddg_results), ("Ecosia", ecosia_results),
+                         ("Brave", brave_results)]:
         if isinstance(result, Exception):
             print(f"[MultiSearch] {name} failed: {result}")
             all_source_results.append([])

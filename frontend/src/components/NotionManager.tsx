@@ -21,6 +21,7 @@ export interface NotionDbConfig {
 
 export interface NotionManagerProps {
   notionConfigured: boolean;
+  defaultPeopleDbId?: string | null;
   onConfigChange: (configs: NotionDbConfig[]) => void;
 }
 
@@ -47,7 +48,7 @@ export function getDbForPurpose(purpose: NotionPurpose): NotionDbConfig | null {
   return configs.find((c) => c.purpose === purpose) || null;
 }
 
-export default function NotionManager({ notionConfigured, onConfigChange }: NotionManagerProps) {
+export default function NotionManager({ notionConfigured, defaultPeopleDbId, onConfigChange }: NotionManagerProps) {
   const [open, setOpen] = useState(false);
   const [databases, setDatabases] = useState<NotionDatabase[]>([]);
   const [loading, setLoading] = useState(false);
@@ -72,12 +73,35 @@ export default function NotionManager({ notionConfigured, onConfigChange }: Noti
       const dbs = await listNotionDatabases();
       setDatabases(dbs);
       setLoaded(true);
+
+      // Auto-assign the default people database if not already assigned
+      if (defaultPeopleDbId) {
+        const currentConfigs = getNotionDbConfigs();
+        const hasPeople = currentConfigs.some((c) => c.purpose === "people");
+        if (!hasPeople) {
+          const match = dbs.find((db) => db.id.replace(/-/g, "") === defaultPeopleDbId.replace(/-/g, ""));
+          if (match) {
+            const newConfigs = [
+              ...currentConfigs,
+              {
+                purpose: "people" as NotionPurpose,
+                label: "People / Contacts",
+                databaseId: match.id,
+                databaseTitle: match.title,
+              },
+            ];
+            setConfigs(newConfigs);
+            localStorage.setItem(NOTION_DATABASES_STORAGE, JSON.stringify(newConfigs));
+            onConfigChange(newConfigs);
+          }
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to connect");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [defaultPeopleDbId, onConfigChange]);
 
   // Auto-load databases when panel is opened for the first time (if backend has key)
   useEffect(() => {

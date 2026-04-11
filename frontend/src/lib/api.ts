@@ -112,6 +112,7 @@ export interface HealthStatus {
   status: string;
   search_configured: boolean;
   notion_configured: boolean;
+  notion_database_id: string | null;
   ai_configured: boolean;
 }
 

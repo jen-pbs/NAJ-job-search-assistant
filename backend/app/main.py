@@ -39,5 +39,6 @@ async def health():
         "status": "ok",
         "search_configured": True,
         "notion_configured": bool(settings.notion_api_key),
+        "notion_database_id": settings.notion_database_id or None,
         "ai_configured": bool(settings.groq_api_key),
     }

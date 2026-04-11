@@ -269,10 +269,14 @@ export default function Home() {
   const [aiApiKey, setAiApiKey] = useState("");
   const [aiModelInput, setAiModelInput] = useState(DEFAULT_AI_MODEL);
   const [notionConfigured, setNotionConfigured] = useState(true);
+  const [notionDefaultDbId, setNotionDefaultDbId] = useState<string | null>(null);
 
   useEffect(() => {
     checkHealth()
-      .then((h) => setNotionConfigured(h.notion_configured))
+      .then((h) => {
+        setNotionConfigured(h.notion_configured);
+        setNotionDefaultDbId(h.notion_database_id || null);
+      })
       .catch(() => {});
   }, []);
 
@@ -590,7 +594,7 @@ export default function Home() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <NotionManager notionConfigured={notionConfigured} onConfigChange={() => {}} />
+              <NotionManager notionConfigured={notionConfigured} defaultPeopleDbId={notionDefaultDbId} onConfigChange={() => {}} />
               <StatusBanner
                 aiSettings={{
                   aiModel,

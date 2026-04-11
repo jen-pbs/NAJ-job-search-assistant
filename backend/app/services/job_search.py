@@ -171,21 +171,29 @@ def _is_specific_job_url(url: str) -> bool:
         # Accept /jobs/slug-title-hexid patterns
         return bool(re.search(r"/jobs/[a-z].*-[0-9a-f]{8,}", u))
     if "glassdoor.com" in u:
-        # Accept /job-listing/ and /Job/ (Glassdoor uses both URL patterns)
-        if "/job-listing/" in u or re.search(r"/[Jj]ob/[a-z0-9]", u):
-            return True
-        # Accept /Jobs/slug-JOBIDnumber patterns
-        if re.search(r"/[Jj]obs/.+-\d{5,}", u):
-            return True
-        # Reject company reviews, salaries, interview pages
-        if any(p in u for p in ["/Reviews/", "/Salaries/", "/Interview/", "/Benefits/"]):
+        # Reject search/browse/aggregator pages
+        if re.search(r"SRCH_KO", u):
             return False
-        return bool(re.search(r"SRCH_KO", u))  # Glassdoor search result direct links
+        if any(p in u for p in ["/Reviews/", "/Salaries/", "/Interview/", "/Benefits/",
+                                 "/Salary/", "/Overview/", "/jobs.htm", "Jobs-SRCH"]):
+            return False
+        # Reject /Jobs/ pages that are search results (e.g. /Jobs/heor-jobs.htm)
+        if re.search(r"/[Jj]obs/[^/]*jobs[^/]*\.htm", u):
+            return False
+        # Accept individual job listings
+        if "/job-listing/" in u:
+            return True
+        # /Job/slug-ID pattern (individual job)
+        if re.search(r"/[Jj]ob/[a-z]", u):
+            return True
+        return False
     if "ziprecruiter.com" in u:
+        # Reject aggregation/search pages
+        if re.search(r"/[Jj]obs/[A-Z].*-in-", u):
+            return False  # /Jobs/Title-in-Location pattern = search page
+        if re.search(r"/jobs/?$", u) or "/jobs/search" in u:
+            return False
         if any(p in u for p in ["/c/", "/jobs/"]):
-            # Reject search pages
-            if re.search(r"/jobs/?$", u) or "/jobs/search" in u:
-                return False
             return True
         return False
     if "biospace.com" in u:
@@ -432,6 +440,26 @@ def _extract_meta(page) -> dict:
                     meta["title"] = (el.get_attribute("content") or "").strip()
             except Exception:
                 pass
+        # Try to get published date from meta
+        for date_meta in ["article:published_time", "datePublished", "date"]:
+            try:
+                el = page.locator(f'meta[property="{date_meta}"]').first
+                if el.count() > 0:
+                    val = (el.get_attribute("content") or "").strip()
+                    if val:
+                        meta["date_posted"] = val
+                        break
+            except Exception:
+                continue
+        if not meta.get("date_posted"):
+            try:
+                el = page.locator('meta[name="date"]').first
+                if el.count() > 0:
+                    val = (el.get_attribute("content") or "").strip()
+                    if val:
+                        meta["date_posted"] = val
+            except Exception:
+                pass
     except Exception:
         pass
     return meta
@@ -598,7 +626,7 @@ def _clean_title(raw: str, company_out: list | None = None) -> str:
     If company_out is provided (mutable list), appends extracted company name to it."""
     t = _SITE_SUFFIX_RE.sub("", raw).strip()
 
-    # Glassdoor SEO wrapper: "CompanyName hiring JobTitle Job in City, ST ..."
+    # Glassdoor SEO: "Company Title Job in City ..." or "Company hiring Title Job in City ..."
     m = re.match(
         r"^(.+?)\s+hiring\s+(.+?)\s+(?:Job|Position|Role)\s+in\s+.+$",
         t, re.IGNORECASE,
@@ -607,6 +635,28 @@ def _clean_title(raw: str, company_out: list | None = None) -> str:
         if company_out is not None:
             company_out.append(m.group(1).strip())
         t = m.group(2).strip()
+    else:
+        # "Company Title Job in City" (no "hiring" keyword, Glassdoor variant)
+        m = re.match(
+            r"^(.+?)\s+(\S+.+?)\s+(?:Job|Position|Role)\s+in\s+.+$",
+            t, re.IGNORECASE,
+        )
+        if m:
+            candidate_co = m.group(1).strip()
+            candidate_title = m.group(2).strip()
+            # Only use this if candidate_title looks like a job title (has enough substance)
+            if len(candidate_title) > 5 and not re.match(r"^\d", candidate_title):
+                if company_out is not None:
+                    company_out.append(candidate_co)
+                t = candidate_title
+
+    # "Company hiring Title" (LinkedIn pattern, no "Job in" suffix)
+    if " hiring " in t.lower():
+        m = re.match(r"^(.+?)\s+hiring\s+(.+)$", t, re.IGNORECASE)
+        if m and len(m.group(2).strip()) > 3:
+            if company_out is not None and not company_out:
+                company_out.append(m.group(1).strip())
+            t = m.group(2).strip()
 
     # Indeed pattern: "JobTitle - CompanyName - City, ST"
     m = re.match(r"^(.+?)\s*[-–]\s*([A-Z][A-Za-z\s&.,'-]+?)\s*[-–]\s*[A-Z][a-zA-Z\s.]+,\s*[A-Z]{2}$", t)
@@ -616,18 +666,26 @@ def _clean_title(raw: str, company_out: list | None = None) -> str:
         t = m.group(1).strip()
 
     # Generic "Title - Company" where company part isn't a known site
+    # Only split if the title part is substantial (>15 chars or has a comma)
     m = re.match(r"^(.+?)\s*[-–|]\s+([A-Z][A-Za-z\s&.,'-]{2,40})\s*$", t)
     if m:
+        title_part = m.group(1).strip()
         candidate = m.group(2).strip()
-        if candidate.lower() not in {s.lower() for s in _SKIP_NAMES}:
-            if company_out is not None and not company_out:
-                company_out.append(candidate)
-            t = m.group(1).strip()
+        if len(title_part) > 15 or "," in title_part:
+            if candidate.lower() not in {s.lower() for s in _SKIP_NAMES}:
+                if company_out is not None and not company_out:
+                    company_out.append(candidate)
+                t = title_part
 
     # Remove trailing junk
     t = re.sub(r"\s*\(Employer provided\).*$", "", t).strip()
     t = re.sub(r"\s*\.\.\.\s*$", "", t).strip()
-    t = re.sub(r"\s+in\s+$", "", t, flags=re.IGNORECASE).strip()
+    # Strip trailing "in CityName" or "in South San" (truncated location)
+    t = re.sub(r"\s+in\s+[A-Z][a-zA-Z\s.]*$", "", t).strip()
+    t = re.sub(r"\s+in\s*$", "", t, flags=re.IGNORECASE).strip()
+    # Decode HTML entities
+    import html as _html
+    t = _html.unescape(t)
     return t[:200]
 
 
@@ -706,6 +764,118 @@ def _try_selectors(page, selectors: list[str], timeout: int = 1500) -> str | Non
     return None
 
 
+def _extract_company_from_url(url: str) -> str | None:
+    """Extract company name from job board URL patterns."""
+    u = url.lower()
+    # Glassdoor: /job-listing/title-COMPANY-JV_KO...
+    # The company is the last meaningful segment before JV_ or _KE
+    if "glassdoor.com" in u:
+        m = re.search(r"/job-listing/(.+?)-JV_", url, re.IGNORECASE)
+        if m:
+            slug = m.group(1)
+            # The company name is typically the last hyphenated segment(s)
+            # Split by hyphens and take the last 1-4 words that look like a company
+            parts = slug.split("-")
+            # Work backwards to find where the company name starts
+            # Company names are usually short (1-4 words) at the end
+            for n in range(1, min(5, len(parts))):
+                candidate = " ".join(parts[-n:])
+                candidate_titled = " ".join(w.capitalize() for w in parts[-n:])
+                # Skip if it looks like job title words
+                skip_words = {"director", "senior", "associate", "manager", "analyst",
+                              "scientist", "research", "medical", "affairs", "health",
+                              "economics", "global", "clinical", "principal", "executive",
+                              "lead", "head", "vp", "field", "regional", "us", "oncology",
+                              "hematology", "cardiovascular", "remote", "hybrid", "job",
+                              "new", "west", "east", "north", "south", "national",
+                              "strategy", "operations", "quality", "regulatory",
+                              "commercial", "inc", "the", "and", "or", "of", "in", "at",
+                              "med", "accounts", "solutions", "science", "liaisons"}
+                if all(p.lower() in skip_words for p in parts[-n:]):
+                    continue
+                # If this segment has at least one non-title word, it's likely the company
+                if any(p.lower() not in skip_words for p in parts[-n:]):
+                    if len(candidate_titled) > 2:
+                        return candidate_titled
+            return None
+    # Indeed: /viewjob?...&company=Name or /cmp/Company
+    if "indeed.com" in u:
+        m = re.search(r"/cmp/([^/?]+)", url)
+        if m:
+            return m.group(1).replace("-", " ").replace("+", " ").strip().title()
+    # BioSpace: /employer/company-name
+    if "biospace.com" in u:
+        m = re.search(r"/employer/([^/?]+)", url)
+        if m:
+            return m.group(1).replace("-", " ").strip().title()
+    return None
+
+
+def _validate_company(company: str | None) -> str | None:
+    """Validate and clean company name, return None if invalid."""
+    if not company:
+        return None
+    c = company.strip()
+    if len(c) < 2:
+        return None
+    low = c.lower()
+    # Reject common non-company words
+    reject = {"inc", "the", "and", "or", "job", "jobs", "remote", "hybrid",
+              "oncology", "hematology", "cardiovascular", "west us", "east us",
+              "us", "usa", "national", "none", "n/a", "unknown"}
+    if low in reject:
+        return None
+    # Reject if it contains description-like phrases
+    if any(phrase in low for phrase in ["will play", "will be", "is a", "we are",
+                                         "pivotal role", "looking for", "responsible for"]):
+        return None
+    # Reject if it's a location pattern (but allow "University of..." names)
+    if re.match(r"^(san|los|new|north|south|east|west)\s", low):
+        if not re.search(r"(pharma|bio|tech|medical|health|science|corp|inc|ltd|llc|university|college|hospital|institute)", low):
+            return None
+    # Allow "The University..." and "The X Hospital" etc.
+    if low.startswith("the ") and re.search(r"(university|hospital|institute|college|foundation|corp|inc)", low):
+        return c
+    # Reject "City OR City" patterns
+    if re.search(r"\b(OR|AND)\b", c) and re.search(r"[A-Z][a-z]+\s+(OR|AND)\s+[A-Z][a-z]+", c):
+        return None
+    # Reject if contains newlines (garbled text)
+    if "\n" in c:
+        return None
+    # Reject pure title-like words as company names
+    title_only = {"director", "manager", "analyst", "scientist", "research",
+                  "field", "us", "pharmaceuticals", "technologies", "scientific",
+                  "pharma", "therapeutics", "bioscience", "biosciences"}
+    if low in title_only:
+        return None
+    # Reject if too long (probably grabbed description text)
+    if len(c) > 60:
+        return None
+    # Reject "Job in City" leftovers
+    if low.startswith("job in") or low.startswith("job "):
+        return None
+    return c
+
+
+def _enrich_snippet_from_url(snippet_data: dict | None, url: str, source: str) -> dict | None:
+    """When page extraction fails (CAPTCHA, auth wall), enrich snippet with URL-derived data."""
+    if not snippet_data or not snippet_data.get("title"):
+        return None
+    result = dict(snippet_data)
+    result["url"] = url
+    result["source"] = source
+    if not result.get("company"):
+        result["company"] = _extract_company_from_url(url)
+    result["company"] = _validate_company(result.get("company"))
+    # Clean location
+    loc = result.get("location") or ""
+    if loc:
+        loc = re.sub(r"^(?:Job|Position|Role)\s+in\s+", "", loc, flags=re.IGNORECASE).strip()
+        loc = re.sub(r"^(?:Oncology|Hematology|Cardiovascular|Neuroscience|Immunology)\s+", "", loc, flags=re.IGNORECASE).strip()
+        result["location"] = loc if loc else None
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Page-level job extraction -- visit the actual page
 # ---------------------------------------------------------------------------
@@ -730,7 +900,16 @@ def _extract_job_from_page(page, url: str, snippet_data: dict | None = None,
 
     # Check auth wall (LinkedIn/Indeed redirect to login)
     if re.search(r"\b(sign up|sign in|log in|join now|create.+account)\b.*\b(to view|to apply|to continue)\b", page_lower):
-        return snippet_data  # Fall back to snippet data
+        return _enrich_snippet_from_url(snippet_data, url, source)
+
+    # Check CAPTCHA/challenge wall (Cloudflare, Glassdoor, etc.)
+    captcha_signals = [
+        "help us protect", "verify that you're a real person", "captcha",
+        "challenge-form", "ray id:", "please verify you are a human",
+        "access denied", "blocked", "unusual traffic",
+    ]
+    if any(sig in page_lower for sig in captcha_signals) and len(page_text) < 2000:
+        return _enrich_snippet_from_url(snippet_data, url, source)
 
     # Check expiry
     for sig in _EXPIRED_SIGNALS:
@@ -769,7 +948,11 @@ def _extract_job_from_page(page, url: str, snippet_data: dict | None = None,
 
         # JSON-LD overrides everything, but fill gaps from snippet
         result["title"] = _clean_title(jsonld["title"]) or result.get("title", "")
-        result["company"] = (jsonld.get("company") or "")[:100] or result.get("company")
+        raw_co = (jsonld.get("company") or "")[:100]
+        # Clean company: strip taglines after separators like │ | - ·
+        if raw_co:
+            raw_co = re.split(r"\s*[│|·]\s*", raw_co)[0].strip()
+        result["company"] = raw_co or result.get("company")
         result["location"] = loc or result.get("location")
         result["salary"] = jsonld.get("salary") or result.get("salary")
         result["date_posted"] = date_str or result.get("date_posted")
@@ -786,6 +969,7 @@ def _extract_job_from_page(page, url: str, snippet_data: dict | None = None,
 
         if result.get("title"):
             result["date_posted"] = _format_date_for_display(result.get("date_posted"))
+            result["company"] = _validate_company(result.get("company"))
             return result
 
     # ---- Meta tags ----
@@ -827,12 +1011,20 @@ def _extract_job_from_page(page, url: str, snippet_data: dict | None = None,
     # ---- Generic text extraction for remaining gaps ----
     if not result.get("company"):
         result["company"] = _extract_company_from_text(page_text)
+    # Last resort: extract company from URL pattern
+    if not result.get("company"):
+        result["company"] = _extract_company_from_url(url)
     if not result.get("salary"):
         result["salary"] = _extract_salary_from_text(page_text)
     if not result.get("location"):
         result["location"] = _extract_location_from_text(page_text)
     if not result.get("date_posted"):
-        result["date_posted"] = _extract_date_from_text(page_text)
+        # Prefer meta tag date over text-extracted date
+        meta_date = meta.get("date_posted")
+        if meta_date:
+            result["date_posted"] = _format_date_for_display(meta_date)
+        else:
+            result["date_posted"] = _extract_date_from_text(page_text)
     if result.get("is_remote") is None:
         result["is_remote"] = _extract_remote_from_text(page_text)
         if result["is_remote"] and not result.get("location"):
@@ -866,21 +1058,47 @@ def _extract_job_from_page(page, url: str, snippet_data: dict | None = None,
 
     # Reject titles that are clearly directory/search pages or login walls
     title_lower = result["title"].lower().strip()
-    if re.search(r"^\d[\d,]+\+?\s+(jobs?|openings?|results?)\b", title_lower):
+    # "456 medical affairs Jobs in San Francisco" or "10 heor Jobs in California"
+    if re.search(r"^\d[\d,]*\+?\s+.{0,60}\bjobs?\b", title_lower):
         return None
     if re.search(r"\b(jobs in|openings in|positions in|jobs near)\b.*\b(united states|usa)\b", title_lower):
         return None
     if any(sig in title_lower for sig in ["job search results", "browse jobs", "find jobs",
                                            "jobs hiring", "open positions"]):
         return None
+    # Glassdoor search page pattern: "Search ... jobs in City"
+    if re.search(r"^search\s+.+\bjobs\b", title_lower):
+        return None
+    # Ends with "jobs" (aggregation page)
+    if re.search(r"\bjobs\s*$", title_lower):
+        return None
+    # ZipRecruiter aggregation: "$62k-$200k ... Jobs (NOW HIRING)"
+    if "now hiring" in title_lower:
+        return None
+    if re.search(r"^\$\d+[kK]", title_lower):
+        return None
     # Reject login/signup wall titles (LinkedIn, Indeed etc. redirect to auth)
     _auth_titles = {"sign up", "sign in", "log in", "login", "join now", "create account",
                     "register", "access denied", "page not found", "404", "error"}
     if title_lower in _auth_titles or title_lower.startswith("sign ") or title_lower.startswith("log "):
         return None
+    # Reject titles that are just site names
+    _site_titles = {"ziprecruiter", "indeed", "glassdoor", "linkedin", "biospace",
+                    "wellfound", "builtin", "built in", "craigslist", "usajobs",
+                    "higheredjobs", "academickeys", "pharmiweb", "science careers",
+                    "healthecareers", "health ecareers"}
+    if title_lower in _site_titles:
+        return None
 
-    # Ensure date is human-readable
+    # Final cleanup
     result["date_posted"] = _format_date_for_display(result.get("date_posted"))
+    result["company"] = _validate_company(result.get("company"))
+    # Clean location: strip prefixes like "Job in", therapy areas, etc.
+    loc = result.get("location") or ""
+    if loc:
+        loc = re.sub(r"^(?:Job|Position|Role)\s+in\s+", "", loc, flags=re.IGNORECASE).strip()
+        loc = re.sub(r"^(?:Oncology|Hematology|Cardiovascular|Neuroscience|Immunology)\s+", "", loc, flags=re.IGNORECASE).strip()
+        result["location"] = loc if loc else None
     return result
 
 
@@ -929,11 +1147,15 @@ def _parse_snippet(text: str, url: str) -> dict | None:
 
     # Reject titles that are clearly directory/search pages
     title_lower = title.lower()
-    if re.search(r"^\d[\d,]+\+?\s+(jobs?|openings?|results?)\b", title_lower):
+    if re.search(r"^\d[\d,]*\+?\s+.{0,60}\bjobs?\b", title_lower):
+        return None
+    if re.search(r"^search\s+.+\bjobs\b", title_lower):
+        return None
+    if re.search(r"\bjobs\s*$", title_lower):
         return None
 
     # Extract all fields from snippet text
-    company = title_company[0] if title_company else _extract_company_from_text(full_text)
+    company = title_company[0] if title_company else (_extract_company_from_text(full_text) or _extract_company_from_url(url))
     salary = _extract_salary_from_text(full_text)
     location = location_from_skipped or _extract_location_from_text(full_text)
     date_posted = _extract_date_from_text(full_text)
@@ -950,11 +1172,17 @@ def _parse_snippet(text: str, url: str) -> dict | None:
     if is_remote and not location:
         location = "Remote"
 
+    # Clean location
+    if location:
+        location = re.sub(r"^(?:Job|Position|Role)\s+in\s+", "", location, flags=re.IGNORECASE).strip()
+        location = re.sub(r"^.{0,30}\s+(?:Job|Position|Role)\s+in\s+", "", location, flags=re.IGNORECASE).strip()
+        location = re.sub(r"^(?:Oncology|Hematology|Cardiovascular|Neuroscience|Immunology)\s+", "", location, flags=re.IGNORECASE).strip()
+
     return {
         "title": title[:200],
-        "company": company[:100] if company else None,
+        "company": _validate_company(company[:100] if company else None),
         "url": url,
-        "location": location,
+        "location": location or None,
         "salary": salary,
         "date_posted": _format_date_for_display(date_posted),
         "source": source,
@@ -1014,7 +1242,7 @@ def _search_jobs_sync(query: str, location: str | None, max_results: int = 25) -
         # Major boards -- broad site: without path restriction for better DDG coverage
         f'site:indeed.com {query}{loc_str}',
         f'site:linkedin.com/jobs {query}{loc_str}',
-        f'site:glassdoor.com {query}{loc_str}',
+        f'site:glassdoor.com/job-listing {query}{loc_str}',
         f'site:ziprecruiter.com {query}{loc_str}',
         # Niche/specialty boards
         f'(site:biospace.com OR site:healthecareers.com) {query}{loc_str}',

@@ -6,6 +6,11 @@ export interface SearchQuery {
   companies?: string[];
   seniority?: string;
   max_results?: number;
+  user_context?: string;
+  ai_model?: string;
+  ai_provider?: string;
+  ai_api_key?: string;
+  ai_base_url?: string;
 }
 
 export interface LinkedInProfile {
@@ -20,6 +25,8 @@ export interface LinkedInProfile {
   role_title: string | null;
   field: string | null;
   company_type: string | null;
+  saved_in_notion?: boolean;
+  notion_page_url?: string | null;
 }
 
 export interface SearchResponse {
@@ -47,6 +54,11 @@ export interface EventSearchQuery {
   query: string;
   location?: string;
   max_results?: number;
+  user_context?: string;
+  ai_model?: string;
+  ai_provider?: string;
+  ai_api_key?: string;
+  ai_base_url?: string;
 }
 
 export interface Event {
@@ -64,6 +76,35 @@ export interface Event {
 export interface EventSearchResponse {
   query_used: string;
   events: Event[];
+  total_found: number;
+}
+
+export interface JobSearchQuery {
+  query: string;
+  location?: string;
+  max_results?: number;
+  user_context?: string;
+  ai_model?: string;
+  ai_provider?: string;
+  ai_api_key?: string;
+  ai_base_url?: string;
+}
+
+export interface Job {
+  title: string;
+  company: string | null;
+  url: string;
+  location: string | null;
+  salary: string | null;
+  date_posted: string | null;
+  source: string | null;
+  description: string | null;
+  is_remote: boolean | null;
+}
+
+export interface JobSearchResponse {
+  query_used: string;
+  jobs: Job[];
   total_found: number;
 }
 
@@ -106,6 +147,19 @@ export async function searchEvents(query: EventSearchQuery): Promise<EventSearch
   return res.json();
 }
 
+export async function searchJobs(query: JobSearchQuery): Promise<JobSearchResponse> {
+  const res = await fetch(`${API_BASE}/api/jobs/search`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(query),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: "Job search failed" }));
+    throw new Error(error.detail || "Job search failed");
+  }
+  return res.json();
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
@@ -114,12 +168,25 @@ export interface ChatMessage {
 export async function sendChatMessage(
   messages: ChatMessage[],
   profileContext?: string,
+  userContext?: string,
+  aiModel?: string,
+  aiProvider?: string,
+  aiApiKey?: string,
+  aiBaseUrl?: string,
   onChunk?: (text: string) => void,
 ): Promise<string> {
   const res = await fetch(`${API_BASE}/api/chat/message`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, profile_context: profileContext }),
+    body: JSON.stringify({
+      messages,
+      profile_context: profileContext,
+      user_context: userContext,
+      ai_model: aiModel,
+      ai_provider: aiProvider,
+      ai_api_key: aiApiKey,
+      ai_base_url: aiBaseUrl,
+    }),
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: "Chat failed" }));
@@ -150,6 +217,66 @@ export async function saveContact(contact: SaveContactRequest): Promise<{ status
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: "Save failed" }));
     throw new Error(error.detail || "Failed to save contact");
+  }
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Notion database management
+// ---------------------------------------------------------------------------
+
+export interface NotionDatabase {
+  id: string;
+  title: string;
+  url: string;
+  columns: Record<string, string>;
+}
+
+export interface NotionSchema {
+  title: string;
+  properties: Record<string, { type: string; id: string; options?: string[] }>;
+}
+
+export async function listNotionDatabases(apiKey?: string): Promise<NotionDatabase[]> {
+  const res = await fetch(`${API_BASE}/api/notion/databases`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ api_key: apiKey || "" }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: "Failed to list databases" }));
+    throw new Error(error.detail || "Failed to list databases");
+  }
+  const data = await res.json();
+  return data.databases;
+}
+
+export async function getNotionSchema(databaseId: string, apiKey?: string): Promise<NotionSchema> {
+  const res = await fetch(`${API_BASE}/api/notion/schema`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ api_key: apiKey || "", database_id: databaseId }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: "Failed to get schema" }));
+    throw new Error(error.detail || "Failed to get schema");
+  }
+  return res.json();
+}
+
+export async function saveToNotion(
+  databaseId: string,
+  fields: Record<string, string | number | boolean>,
+  apiKey?: string,
+): Promise<{ status: string; notion_page: { id: string; url: string } }> {
+  const res = await fetch(`${API_BASE}/api/notion/save`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ api_key: apiKey || "", database_id: databaseId, fields }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: "Failed to save" }));
+    throw new Error(error.detail || "Failed to save to Notion");
   }
   return res.json();
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { LinkedInProfile, saveContact } from "@/lib/api";
 
 interface ProfileCardProps {
@@ -11,9 +11,14 @@ interface ProfileCardProps {
 
 export default function ProfileCard({ profile, index, onChat }: ProfileCardProps) {
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [notionUrl, setNotionUrl] = useState<string | null>(null);
+  const [saved, setSaved] = useState(Boolean(profile.saved_in_notion));
+  const [notionUrl, setNotionUrl] = useState<string | null>(profile.notion_page_url || null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSaved(Boolean(profile.saved_in_notion));
+    setNotionUrl(profile.notion_page_url || null);
+  }, [profile.saved_in_notion, profile.notion_page_url, profile.linkedin_url]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -132,9 +137,9 @@ export default function ProfileCard({ profile, index, onChat }: ProfileCardProps
                   </svg>
                   {notionUrl ? (
                     <a href={notionUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                      Saved
+                      Saved in Notion
                     </a>
-                  ) : "Saved"}
+                  ) : "Saved in Notion"}
                 </div>
               ) : (
                 <button

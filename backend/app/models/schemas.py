@@ -18,6 +18,11 @@ class SearchQuery(BaseModel):
     seniority: str | None = None
     alternative_terms: list[str] | None = None
     max_results: int = 20
+    user_context: str | None = None
+    ai_model: str | None = None
+    ai_provider: str | None = None
+    ai_api_key: str | None = None
+    ai_base_url: str | None = None
 
 
 class LinkedInProfile(BaseModel):
@@ -32,6 +37,8 @@ class LinkedInProfile(BaseModel):
     role_title: str | None = None
     field: str | None = None
     company_type: str | None = None
+    saved_in_notion: bool = False
+    notion_page_url: str | None = None
 
 
 class SearchResponse(BaseModel):

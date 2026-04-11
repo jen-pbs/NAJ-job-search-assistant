@@ -1,6 +1,7 @@
 "use client";
 
 import { Event } from "@/lib/api";
+import SaveToNotionButton from "./SaveToNotionButton";
 
 interface EventCardProps {
   event: Event;
@@ -100,17 +101,32 @@ export default function EventCard({ event, index }: EventCardProps) {
               )}
             </div>
 
-            <a
-              href={event.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 border border-indigo-200/60 rounded-lg hover:bg-indigo-50 transition-colors flex-shrink-0"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-              </svg>
-              View
-            </a>
+            <div className="flex flex-col gap-1.5 flex-shrink-0">
+              <a
+                href={event.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 border border-indigo-200/60 rounded-lg hover:bg-indigo-50 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                </svg>
+                View
+              </a>
+              <SaveToNotionButton
+                purpose="events"
+                fields={{
+                  Name: event.title,
+                  Title: event.title,
+                  Date: event.date || "",
+                  Location: event.location || "",
+                  URL: event.url,
+                  Link: event.url,
+                  Source: event.source || "",
+                  Description: event.description || "",
+                }}
+              />
+            </div>
           </div>
         </div>
       </div>

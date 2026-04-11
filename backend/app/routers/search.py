@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from urllib.parse import urlsplit, urlunsplit
 
 from app.config import Settings, get_settings
 from app.models.schemas import SearchQuery, SearchResponse, SaveContactRequest
@@ -7,6 +8,7 @@ from app.services.academic_enricher import enrich_with_academic_data
 from app.services.web_bio_enricher import enrich_with_web_bios
 from app.services.ai_scorer import score_merged_profiles
 from app.services.query_interpreter import interpret_query
+from app.services.ai_provider import resolve_ai_connection
 from app.services.notion_client import (
     save_contact_to_notion,
     get_database_schema,
@@ -16,6 +18,33 @@ from app.services.notion_client import (
 router = APIRouter(prefix="/api/search", tags=["search"])
 
 
+def _normalize_linkedin_url(url: str | None) -> str:
+    if not url:
+        return ""
+    cleaned = url.strip()
+    if not cleaned:
+        return ""
+    try:
+        parsed = urlsplit(cleaned)
+        netloc = parsed.netloc.lower()
+        if netloc.startswith("www."):
+            netloc = netloc[4:]
+        path = (parsed.path or "").rstrip("/")
+        return urlunsplit((parsed.scheme.lower(), netloc, path, "", ""))
+    except Exception:
+        return cleaned.rstrip("/").lower()
+
+
+def _build_saved_lookup(saved_contacts: list[dict]) -> dict[str, str]:
+    lookup: dict[str, str] = {}
+    for contact in saved_contacts:
+        linkedin_url = contact.get("LinkedIn") or contact.get("linkedin_url")
+        normalized = _normalize_linkedin_url(linkedin_url)
+        if normalized:
+            lookup[normalized] = contact.get("url", "")
+    return lookup
+
+
 @router.post("/find-people", response_model=SearchResponse)
 async def find_people(
     body: SearchQuery,
@@ -23,10 +52,35 @@ async def find_people(
 ):
     """Find LinkedIn profiles using multi-source parallel search."""
     try:
+        ai_connection = None
+        ai_config_explicit = any(
+            [
+                (body.ai_provider or "").strip(),
+                (body.ai_api_key or "").strip(),
+                (body.ai_base_url or "").strip(),
+            ]
+        )
+        try:
+            ai_connection = resolve_ai_connection(
+                settings=settings,
+                ai_provider=body.ai_provider,
+                ai_api_key=body.ai_api_key,
+                ai_base_url=body.ai_base_url,
+            )
+        except ValueError as e:
+            if ai_config_explicit:
+                raise HTTPException(status_code=400, detail=f"AI settings error: {e}")
+
         interpreted = body
-        if settings.groq_api_key:
+        if ai_connection:
             try:
-                interpreted = await interpret_query(body.query, settings.groq_api_key)
+                interpreted = await interpret_query(
+                    body.query,
+                    ai_connection["api_key"],
+                    body.user_context,
+                    body.ai_model or settings.ai_model,
+                    ai_connection["base_url"],
+                )
                 interpreted.max_results = body.max_results
             except Exception as e:
                 print(f"Query interpretation failed, using raw query: {e}")
@@ -93,10 +147,15 @@ async def find_people(
             except Exception as e:
                 print(f"Enrichment failed (continuing without): {e}")
 
-            if settings.groq_api_key:
+            if ai_connection:
                 try:
                     profiles = await score_merged_profiles(
-                        merged_profiles, body.query, settings.groq_api_key
+                        merged_profiles,
+                        body.query,
+                        ai_connection["api_key"],
+                        body.user_context,
+                        body.ai_model or settings.ai_model,
+                        ai_connection["base_url"],
                     )
                 except Exception as e:
                     print(f"AI scoring failed, returning unscored results: {e}")
@@ -105,6 +164,20 @@ async def find_people(
             else:
                 from app.services.ai_scorer import _merged_to_linkedin
                 profiles = [_merged_to_linkedin(m) for m in merged_profiles]
+
+        if profiles and settings.notion_api_key:
+            try:
+                saved_contacts = await get_saved_contacts(
+                    settings.notion_api_key, settings.notion_database_id
+                )
+                saved_lookup = _build_saved_lookup(saved_contacts)
+                for profile in profiles:
+                    normalized = _normalize_linkedin_url(profile.linkedin_url)
+                    if normalized and normalized in saved_lookup:
+                        profile.saved_in_notion = True
+                        profile.notion_page_url = saved_lookup[normalized] or None
+            except Exception as e:
+                print(f"Saved-contact lookup failed (continuing): {e}")
 
         return SearchResponse(
             query_used=query_used,

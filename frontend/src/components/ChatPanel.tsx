@@ -5,6 +5,11 @@ import { LinkedInProfile, ChatMessage, sendChatMessage } from "@/lib/api";
 
 interface ChatPanelProps {
   profile: LinkedInProfile;
+  userContext?: string;
+  aiModel?: string;
+  aiProvider?: string;
+  aiApiKey?: string;
+  aiBaseUrl?: string;
   onClose: () => void;
 }
 
@@ -28,7 +33,7 @@ const QUICK_PROMPTS = [
   "Why is this person a good connection for me?",
 ];
 
-export default function ChatPanel({ profile, onClose }: ChatPanelProps) {
+export default function ChatPanel({ profile, userContext, aiModel, aiProvider, aiApiKey, aiBaseUrl, onClose }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -58,7 +63,7 @@ export default function ChatPanel({ profile, onClose }: ChatPanelProps) {
     setMessages([...newMessages, assistantMsg]);
 
     try {
-      await sendChatMessage(newMessages, profileContext, (partial) => {
+      await sendChatMessage(newMessages, profileContext, userContext, aiModel, aiProvider, aiApiKey, aiBaseUrl, (partial) => {
         setMessages((prev) => {
           const updated = [...prev];
           updated[updated.length - 1] = { role: "assistant", content: partial };

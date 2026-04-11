@@ -1,19 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.config import Settings, get_settings
-from app.models.events import EventSearchQuery, EventSearchResponse
-from app.services.event_search import search_events, interpret_event_query
+from app.models.jobs import JobSearchQuery, JobSearchResponse
+from app.services.job_search import search_jobs, interpret_job_query
 from app.services.ai_provider import resolve_ai_connection
 
-router = APIRouter(prefix="/api/events", tags=["events"])
+router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 
-@router.post("/search", response_model=EventSearchResponse)
-async def find_events(
-    body: EventSearchQuery,
+@router.post("/search", response_model=JobSearchResponse)
+async def find_jobs(
+    body: JobSearchQuery,
     settings: Settings = Depends(get_settings),
 ):
-    """Search for networking events, conferences, and meetups."""
+    """Search for job listings across multiple job boards."""
     try:
         ai_connection = None
         ai_config_explicit = any(
@@ -37,28 +37,28 @@ async def find_events(
         interpreted = body
         if ai_connection and body.user_context:
             try:
-                interpreted = await interpret_event_query(
+                interpreted = await interpret_job_query(
                     body.query,
                     ai_connection["api_key"],
                     body.user_context,
                     body.ai_model or settings.ai_model,
                     ai_connection["base_url"],
-                 )
+                )
                 interpreted.max_results = body.max_results
             except Exception as e:
-                print(f"Event query interpretation failed, using raw query: {e}")
+                print(f"Job query interpretation failed, using raw query: {e}")
 
-        events, query_used = await search_events(
+        jobs, query_used = await search_jobs(
             query=interpreted.query,
             location=interpreted.location or body.location,
             max_results=interpreted.max_results,
         )
 
-        return EventSearchResponse(
+        return JobSearchResponse(
             query_used=query_used,
-            events=events,
-            total_found=len(events),
+            jobs=jobs,
+            total_found=len(jobs),
         )
     except Exception as e:
-        print(f"Event search error: {e}")
+        print(f"Job search error: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -3,19 +3,67 @@ from notion_client import AsyncClient
 from app.models.schemas import SaveContactRequest
 
 
+async def list_user_databases(api_key: str) -> list[dict]:
+    """List all databases the integration can access."""
+    client = AsyncClient(auth=api_key)
+    results: list[dict] = []
+    start_cursor = None
+
+    while True:
+        kwargs: dict = {"filter": {"property": "object", "value": "database"}}
+        if start_cursor:
+            kwargs["start_cursor"] = start_cursor
+        resp = await client.search(**kwargs)
+
+        for item in resp.get("results", []):
+            if item.get("object") != "database":
+                continue
+            title_parts = item.get("title", [])
+            title = title_parts[0].get("plain_text", "") if title_parts else ""
+            props = item.get("properties", {})
+            results.append({
+                "id": item["id"],
+                "title": title,
+                "url": item.get("url", ""),
+                "columns": {
+                    name: prop["type"]
+                    for name, prop in props.items()
+                },
+            })
+
+        if not resp.get("has_more"):
+            break
+        start_cursor = resp.get("next_cursor")
+
+    return results
+
+
 async def get_database_schema(api_key: str, database_id: str) -> dict:
     """Fetch the Notion database schema to understand its properties."""
     client = AsyncClient(auth=api_key)
     db = await client.databases.retrieve(database_id=database_id)
+
+    properties = {}
+    for name, prop in db.get("properties", {}).items():
+        prop_info: dict = {"type": prop["type"], "id": prop["id"]}
+        # Include select/multi_select options so frontend can show dropdowns
+        if prop["type"] == "select" and "select" in prop:
+            prop_info["options"] = [
+                o.get("name", "") for o in prop["select"].get("options", [])
+            ]
+        elif prop["type"] == "multi_select" and "multi_select" in prop:
+            prop_info["options"] = [
+                o.get("name", "") for o in prop["multi_select"].get("options", [])
+            ]
+        elif prop["type"] == "status" and "status" in prop:
+            prop_info["options"] = [
+                o.get("name", "") for o in prop["status"].get("options", [])
+            ]
+        properties[name] = prop_info
+
     return {
         "title": db.get("title", [{}])[0].get("plain_text", ""),
-        "properties": {
-            name: {
-                "type": prop["type"],
-                "id": prop["id"],
-            }
-            for name, prop in db.get("properties", {}).items()
-        },
+        "properties": properties,
     }
 
 
@@ -92,38 +140,163 @@ async def get_saved_contacts(
 ) -> list[dict]:
     """Fetch existing contacts from the Notion database."""
     client = AsyncClient(auth=api_key)
-
-    results = await client.databases.query(database_id=database_id)
-
     contacts = []
-    for page in results.get("results", []):
-        props = page.get("properties", {})
-        contact = {"id": page["id"], "url": page["url"]}
+    start_cursor: str | None = None
 
-        for prop_name, prop_value in props.items():
-            ptype = prop_value.get("type")
-            if ptype == "title":
-                texts = prop_value.get("title", [])
-                contact[prop_name] = texts[0].get("plain_text", "") if texts else ""
-            elif ptype == "rich_text":
-                texts = prop_value.get("rich_text", [])
-                contact[prop_name] = texts[0].get("plain_text", "") if texts else ""
-            elif ptype == "url":
-                contact[prop_name] = prop_value.get("url", "")
-            elif ptype == "select":
-                sel = prop_value.get("select")
-                contact[prop_name] = sel.get("name", "") if sel else ""
-            elif ptype == "status":
-                sel = prop_value.get("status")
-                contact[prop_name] = sel.get("name", "") if sel else ""
-            elif ptype == "number":
-                contact[prop_name] = prop_value.get("number")
-            elif ptype == "email":
-                contact[prop_name] = prop_value.get("email", "")
-            elif ptype == "date":
-                d = prop_value.get("date")
-                contact[prop_name] = d.get("start", "") if d else ""
+    while True:
+        query_kwargs = {"database_id": database_id}
+        if start_cursor:
+            query_kwargs["start_cursor"] = start_cursor
 
-        contacts.append(contact)
+        results = await client.databases.query(**query_kwargs)
+
+        for page in results.get("results", []):
+            props = page.get("properties", {})
+            contact = {"id": page["id"], "url": page["url"]}
+
+            for prop_name, prop_value in props.items():
+                ptype = prop_value.get("type")
+                if ptype == "title":
+                    texts = prop_value.get("title", [])
+                    contact[prop_name] = texts[0].get("plain_text", "") if texts else ""
+                elif ptype == "rich_text":
+                    texts = prop_value.get("rich_text", [])
+                    contact[prop_name] = texts[0].get("plain_text", "") if texts else ""
+                elif ptype == "url":
+                    contact[prop_name] = prop_value.get("url", "")
+                elif ptype == "select":
+                    sel = prop_value.get("select")
+                    contact[prop_name] = sel.get("name", "") if sel else ""
+                elif ptype == "status":
+                    sel = prop_value.get("status")
+                    contact[prop_name] = sel.get("name", "") if sel else ""
+                elif ptype == "number":
+                    contact[prop_name] = prop_value.get("number")
+                elif ptype == "email":
+                    contact[prop_name] = prop_value.get("email", "")
+                elif ptype == "date":
+                    d = prop_value.get("date")
+                    contact[prop_name] = d.get("start", "") if d else ""
+
+            contacts.append(contact)
+
+        if not results.get("has_more"):
+            break
+        start_cursor = results.get("next_cursor")
 
     return contacts
+
+
+async def save_item_to_notion(
+    api_key: str,
+    database_id: str,
+    fields: dict,
+) -> dict:
+    """Save any item to any Notion database using dynamic field mapping.
+
+    The `fields` dict maps Notion column names to values.
+    The function auto-detects the column type from the database schema
+    and formats the value accordingly.
+    """
+    client = AsyncClient(auth=api_key)
+    db = await client.databases.retrieve(database_id=database_id)
+    db_props = db.get("properties", {})
+
+    properties: dict = {}
+    for col_name, value in fields.items():
+        if col_name not in db_props or not value:
+            continue
+        col_type = db_props[col_name]["type"]
+
+        if col_type == "title":
+            properties[col_name] = {
+                "title": [{"text": {"content": str(value)[:2000]}}]
+            }
+        elif col_type == "rich_text":
+            properties[col_name] = {
+                "rich_text": [{"text": {"content": str(value)[:2000]}}]
+            }
+        elif col_type == "url":
+            properties[col_name] = {"url": str(value)}
+        elif col_type == "email":
+            properties[col_name] = {"email": str(value)}
+        elif col_type == "number":
+            try:
+                properties[col_name] = {"number": float(value)}
+            except (ValueError, TypeError):
+                pass
+        elif col_type == "select":
+            properties[col_name] = {"select": {"name": str(value)}}
+        elif col_type == "multi_select":
+            if isinstance(value, list):
+                properties[col_name] = {
+                    "multi_select": [{"name": str(v)} for v in value]
+                }
+            else:
+                properties[col_name] = {
+                    "multi_select": [{"name": str(value)}]
+                }
+        elif col_type == "status":
+            properties[col_name] = {"status": {"name": str(value)}}
+        elif col_type == "checkbox":
+            properties[col_name] = {"checkbox": bool(value)}
+        elif col_type == "date":
+            properties[col_name] = {"date": {"start": str(value)}}
+
+    page = await client.pages.create(
+        parent={"database_id": database_id},
+        properties=properties,
+    )
+    return {"id": page["id"], "url": page["url"]}
+
+
+async def get_saved_items(
+    api_key: str,
+    database_id: str,
+) -> list[dict]:
+    """Fetch all items from any Notion database (generic version)."""
+    client = AsyncClient(auth=api_key)
+    items: list[dict] = []
+    start_cursor: str | None = None
+
+    while True:
+        kwargs: dict = {"database_id": database_id}
+        if start_cursor:
+            kwargs["start_cursor"] = start_cursor
+        results = await client.databases.query(**kwargs)
+
+        for page in results.get("results", []):
+            props = page.get("properties", {})
+            item: dict = {"id": page["id"], "url": page["url"]}
+            for prop_name, prop_value in props.items():
+                ptype = prop_value.get("type")
+                if ptype == "title":
+                    texts = prop_value.get("title", [])
+                    item[prop_name] = texts[0].get("plain_text", "") if texts else ""
+                elif ptype == "rich_text":
+                    texts = prop_value.get("rich_text", [])
+                    item[prop_name] = texts[0].get("plain_text", "") if texts else ""
+                elif ptype == "url":
+                    item[prop_name] = prop_value.get("url", "")
+                elif ptype == "select":
+                    sel = prop_value.get("select")
+                    item[prop_name] = sel.get("name", "") if sel else ""
+                elif ptype == "status":
+                    sel = prop_value.get("status")
+                    item[prop_name] = sel.get("name", "") if sel else ""
+                elif ptype == "number":
+                    item[prop_name] = prop_value.get("number")
+                elif ptype == "email":
+                    item[prop_name] = prop_value.get("email", "")
+                elif ptype == "date":
+                    d = prop_value.get("date")
+                    item[prop_name] = d.get("start", "") if d else ""
+                elif ptype == "checkbox":
+                    item[prop_name] = prop_value.get("checkbox", False)
+            items.append(item)
+
+        if not results.get("has_more"):
+            break
+        start_cursor = results.get("next_cursor")
+
+    return items

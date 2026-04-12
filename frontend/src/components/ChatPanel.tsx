@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { LinkedInProfile, ChatMessage, sendChatMessage } from "@/lib/api";
+import { LinkedInProfile, Job, ChatMessage, sendChatMessage } from "@/lib/api";
 
 interface ChatPanelProps {
-  profile: LinkedInProfile;
+  profile?: LinkedInProfile;
+  job?: Job;
   userContext?: string;
   aiModel?: string;
   aiProvider?: string;
@@ -26,20 +27,56 @@ function buildProfileContext(profile: LinkedInProfile): string {
   return parts.join("\n");
 }
 
-const QUICK_PROMPTS = [
+function buildJobContext(job: Job): string {
+  const parts = [`Job Title: ${job.title}`];
+  if (job.company) parts.push(`Company: ${job.company}`);
+  if (job.location) parts.push(`Location: ${job.location}`);
+  if (job.salary) parts.push(`Salary: ${job.salary}`);
+  if (job.is_remote) parts.push(`Remote: Yes`);
+  if (job.date_posted) parts.push(`Posted: ${job.date_posted}`);
+  if (job.source) parts.push(`Source: ${job.source}`);
+  if (job.description) parts.push(`Description: ${job.description}`);
+  if (job.relevance_reason) parts.push(`AI fit assessment: ${job.relevance_reason}`);
+  parts.push(`URL: ${job.url}`);
+  return parts.join("\n");
+}
+
+const PROFILE_PROMPTS = [
   "Draft a LinkedIn connection request",
   "Draft a follow-up email after connecting",
   "What questions should I ask in an informational interview?",
   "Why is this person a good connection for me?",
 ];
 
-export default function ChatPanel({ profile, userContext, aiModel, aiProvider, aiApiKey, aiBaseUrl, onClose }: ChatPanelProps) {
+const JOB_PROMPTS = [
+  "Is this job a good fit for me? Why or why not?",
+  "Help me tailor my resume for this role",
+  "Draft a cover letter for this position",
+  "What interview questions should I prepare for?",
+];
+
+export default function ChatPanel({ profile, job, userContext, aiModel, aiProvider, aiApiKey, aiBaseUrl, onClose }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const profileContext = buildProfileContext(profile);
+
+  const isJob = !!job;
+  const contextStr = profile ? buildProfileContext(profile) : job ? buildJobContext(job) : "";
+  const title = profile ? profile.name : job ? job.title : "";
+  const subtitle = profile
+    ? (profile.headline || profile.role_title || "LinkedIn Profile")
+    : job
+    ? (job.company || job.source || "Job Listing")
+    : "";
+  const initials = isJob
+    ? (job.company || "?").split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() || "").join("")
+    : (profile?.name || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+  const quickPrompts = isJob ? JOB_PROMPTS : PROFILE_PROMPTS;
+  const emptyMessage = isJob
+    ? "Ask me about this job, get help with your application, or discuss fit with your background."
+    : "Ask me to draft outreach messages, prepare interview questions, or discuss this profile.";
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -63,7 +100,7 @@ export default function ChatPanel({ profile, userContext, aiModel, aiProvider, a
     setMessages([...newMessages, assistantMsg]);
 
     try {
-      await sendChatMessage(newMessages, profileContext, userContext, aiModel, aiProvider, aiApiKey, aiBaseUrl, (partial) => {
+      await sendChatMessage(newMessages, contextStr, userContext, aiModel, aiProvider, aiApiKey, aiBaseUrl, (partial) => {
         setMessages((prev) => {
           const updated = [...prev];
           updated[updated.length - 1] = { role: "assistant", content: partial };
@@ -97,20 +134,15 @@ export default function ChatPanel({ profile, userContext, aiModel, aiProvider, a
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-purple-50">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm">
-              {profile.name
-                .split(" ")
-                .map((w) => w[0])
-                .join("")
-                .slice(0, 2)
-                .toUpperCase()}
+            <div className={`w-10 h-10 ${isJob ? "rounded-lg" : "rounded-full"} bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm`}>
+              {initials}
             </div>
             <div>
               <h3 className="font-semibold text-gray-900 text-sm">
-                Chat about {profile.name}
+                Chat about {title}
               </h3>
               <p className="text-xs text-gray-500 truncate max-w-[300px]">
-                {profile.headline || profile.role_title || "LinkedIn Profile"}
+                {subtitle}
               </p>
             </div>
           </div>
@@ -128,12 +160,10 @@ export default function ChatPanel({ profile, userContext, aiModel, aiProvider, a
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {messages.length === 0 && (
             <div className="text-center py-8">
-              <div className="text-4xl mb-3">💬</div>
-              <p className="text-gray-600 text-sm mb-5">
-                Ask me to draft outreach messages, prepare interview questions, or discuss this profile.
-              </p>
+              <div className="text-4xl mb-3">{isJob ? "💼" : "💬"}</div>
+              <p className="text-gray-600 text-sm mb-5">{emptyMessage}</p>
               <div className="flex flex-wrap justify-center gap-2">
-                {QUICK_PROMPTS.map((prompt) => (
+                {quickPrompts.map((prompt) => (
                   <button
                     key={prompt}
                     onClick={() => handleSend(prompt)}

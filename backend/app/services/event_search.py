@@ -130,6 +130,7 @@ _REJECT_URL_PATTERNS = [
     "mapleobserver.com", "/past-conferences",
     "allconferencealert.com", "internationalconferencealerts.com",
     "10times.com", "stayhappening.com",
+    "crm.smdm.org", "/crm/", "/membership/",
 ]
 
 
@@ -199,7 +200,8 @@ def _parse_event_date(date_str: str | None) -> datetime | None:
     clean = re.sub(r"\s*[-–]\s*(?:\w+\s+)?\d{1,2}\b", "", clean).strip()
     for fmt in ("%b %d, %Y", "%B %d, %Y", "%b %d %Y", "%B %d %Y",
                 "%b. %d, %Y", "%b. %d %Y", "%b %d,%Y", "%B %d,%Y",
-                "%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d"):
+                "%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d",
+                "%b %Y", "%B %Y"):
         try:
             return datetime.strptime(clean, fmt)
         except ValueError:
@@ -224,11 +226,21 @@ def _is_event_in_past(date_str: str | None) -> bool:
 
 
 def _extract_date_from_text(text: str) -> str | None:
-    # "May 17-20, 2026" or "May 17, 2026"
+    # "Thu, Feb 12, 2026" or "Wednesday, May 4, 2026" (strip day-of-week)
     m = re.search(
+        r"(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\w*,?\s+)?"
         r"((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|"
         r"Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
         r"\.?\s+\d{1,2}(?:\s*[-–]\s*(?:\w+\s+)?\d{1,2})?,?\s*\d{4})",
+        text, re.IGNORECASE,
+    )
+    if m:
+        return m.group(1).strip()
+    # "JUN 2026" or "June 2026" (month + year, no day)
+    m = re.search(
+        r"\b((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|"
+        r"Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
+        r"\.?\s+\d{4})\b",
         text, re.IGNORECASE,
     )
     if m:
@@ -452,6 +464,10 @@ def _extract_event_from_page(page, url: str, snippet_data: dict | None = None,
     except Exception:
         pass
 
+    # ---- Try extracting date/location from the title itself ----
+    if not result.get("date") and result.get("title"):
+        result["date"] = _extract_date_from_text(result["title"])
+
     # ---- Page text extraction for gaps ----
     if not result.get("date"):
         result["date"] = _extract_date_from_text(page_text)
@@ -500,7 +516,7 @@ def _extract_event_from_page(page, url: str, snippet_data: dict | None = None,
         return None
     if re.search(r"\bjobs\b", title_lower):
         return None
-    # Reject bare domain names as titles
+    # Reject bare domain names as titles (crm.smdm.org, eventbrite.com, etc.)
     if re.match(r"^[a-z0-9.-]+\.(com|org|net|io|ai|co)\b", title_lower):
         return None
     # Reject PDFs and newsletters
@@ -516,11 +532,24 @@ def _extract_event_from_page(page, url: str, snippet_data: dict | None = None,
     if re.search(r"\b(top \d+|trends|blog|article|news)\b", title_lower):
         if not re.search(r"\b(conference|summit|event|meetup|workshop|seminar|webinar)\b", title_lower):
             return None
-    # Reject organization homepages that aren't events
+    # Reject listing/directory pages that leak through
+    if re.search(r"^(upcoming events|past events|all events|browse events|event listing)", title_lower):
+        return None
+    if re.search(r"\bupcoming\s+(events|conferences)\s*[|]", title_lower):
+        return None
+    # Reject organization homepages / bare org names that aren't events
     _org_titles = {"biotechnology innovation organization", "informa connect",
-                   "biocom california", "academyhealth"}
+                   "biocom california", "academyhealth", "ispor", "smdm",
+                   "ashecon", "bio", "biocom", "academy health",
+                   "society for medical decision making"}
     cleaned = title_lower.rstrip(" |").split("|")[0].strip()
     if cleaned in _org_titles:
+        return None
+    # Reject very short titles that are just org names (< 20 chars, no event keywords)
+    if len(result["title"]) < 20 and not re.search(
+        r"\b(conference|summit|event|meetup|workshop|seminar|webinar|symposium|forum|fair|expo|showcase|networking)\b",
+        title_lower
+    ):
         return None
 
     # Clean and validate location
@@ -530,6 +559,16 @@ def _extract_event_from_page(page, url: str, snippet_data: dict | None = None,
         # Reject degree names, garbage
         if re.match(r"^(PharmD|PhD|MBA|MS|MD|BSc|MPH)\b", loc):
             loc = ""
+        # Reject dates that leaked into location field
+        if re.match(r"^(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b", loc, re.IGNORECASE):
+            loc = ""
+        if re.match(r"^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}", loc):
+            loc = ""
+        if re.match(r"^\d{4}-\d{2}-\d{2}", loc):
+            loc = ""
+        # Reject "Digital Partnering, US" style non-locations
+        if re.search(r"\b(digital partnering|online|webcast)\b", loc, re.IGNORECASE):
+            loc = "Virtual"
         # Reject if too short or too long
         if len(loc) < 3 or len(loc) > 80:
             loc = ""
@@ -570,9 +609,19 @@ def _parse_event_snippet(text: str, url: str) -> dict | None:
     title_lower = title.lower()
     if re.search(r"\bjobs\b", title_lower):
         return None
+    # Reject listing/directory pages
+    if re.search(r"^(upcoming events|past events|all events|browse events)", title_lower):
+        return None
+    # Reject bare domain names
+    if re.match(r"^[a-z0-9.-]+\.(com|org|net|io|ai|co)\b", title_lower):
+        return None
+    # Reject bare org names without event keywords
+    _org_names = {"academyhealth", "ispor", "smdm", "ashecon", "bio", "biocom"}
+    if title_lower.strip() in _org_names:
+        return None
 
-    # Extract fields from snippet text
-    date = _extract_date_from_text(full_text)
+    # Extract fields from snippet text + title
+    date = _extract_date_from_text(title) or _extract_date_from_text(full_text)
     location = _extract_location_from_text(full_text)
     is_free, price_str = _extract_price_from_text(full_text)
 
@@ -729,12 +778,24 @@ def _search_events_sync(query: str, location: str | None, max_results: int = 20)
                 event = _extract_event_from_page(page, url, snippet)
                 page.close()
                 if event and event.get("title"):
-                    # Deduplicate by title (e.g. same Meetup event cross-posted to multiple groups)
+                    # Deduplicate by normalized title
                     title_key = re.sub(r"\s+", " ", event["title"].lower().strip())[:80]
-                    if title_key in seen_titles:
+                    # Strip trailing source/suffix for dedup
+                    title_key_clean = re.sub(r"\s*[-–|]\s*(upcoming|conferences?|events?|tickets?|&\s*events?).*$", "", title_key).strip()
+                    if title_key in seen_titles or title_key_clean in seen_titles:
                         print(f"  [{idx+1}] SKIP (dupe): {event.get('title', '')[:60]}")
                         continue
+                    # Also check if any existing title starts with or contains this one
+                    is_dupe = False
+                    for existing in list(seen_titles):
+                        if (title_key_clean in existing or existing in title_key_clean) and len(title_key_clean) > 5:
+                            is_dupe = True
+                            break
+                    if is_dupe:
+                        print(f"  [{idx+1}] SKIP (fuzzy dupe): {event.get('title', '')[:60]}")
+                        continue
                     seen_titles.add(title_key)
+                    seen_titles.add(title_key_clean)
                     results.append(event)
                     has_jsonld = "jsonld" if event.get("date") and event.get("location") else "text"
                     print(f"  [{idx+1}] OK ({has_jsonld}): {event.get('title', '')[:60]} | {event.get('date', '-')} | {event.get('location', '-')}")

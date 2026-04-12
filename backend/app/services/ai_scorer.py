@@ -18,14 +18,24 @@ Read the user's query carefully. Extract their specific requirements:
 - What location, if any? (e.g. San Francisco Bay area)
 - What seniority or company type? (e.g. director level, pharma, biotech)
 
-These specific requirements MUST drive your scoring. A profile that meets the user's specific criteria scores high. One that is in the right field but misses the key criteria (e.g. has no academic background when the user asked for academia-to-industry transitions) scores lower.
+These specific requirements MUST drive your scoring. A profile that meets the user's specific criteria scores high. One that is in the right field but misses the key criteria scores lower.
+
+IMPORTANT -- INFERRING CAREER TRANSITIONS:
+When the user asks for "transitioned from academia to industry" or similar, you must INFER this from available clues, NOT wait for it to be stated explicitly. Look for these signals:
+- Education: PhD, PharmD, postdoc, or advanced degree -> combined with a current industry role = likely academia-to-industry transition
+- Past roles at universities or research institutions -> followed by pharma/biotech/CRO roles
+- Publications, research background, or "researcher" in history -> now in industry
+- Keywords like "former professor", "postdoctoral", or university names in experience
+- Someone with a PhD who is now "Director at Genentech" HAS transitioned from academia -- you don't need them to say "I transitioned"
+
+Score these inferred transitions highly. Most HEOR professionals in industry started in academia -- a PhD in health economics who now works at a pharma company is a textbook example of the transition the user is looking for.
 
 Profiles to evaluate:
 {profiles}
 
 For each profile:
 1. Score 0-100 based on how well they match the user's SPECIFIC query (not just general field relevance)
-2. Write 2-3 sentences explaining the match. Be explicit: does this person meet the specific requirements in the query? If the user asked for people who transitioned from academia, say whether this person did. If a location was specified, say whether they're in it. Reference actual details from their profile.
+2. Write 2-3 sentences explaining the match. Be explicit about what you found: mention their degree, past academic work, and current industry role. If you inferred a transition, explain the evidence.
 
 Also extract:
 3. "company": current company name. Null only if truly unknown.

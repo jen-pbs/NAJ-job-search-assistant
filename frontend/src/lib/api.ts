@@ -100,6 +100,8 @@ export interface Job {
   source: string | null;
   description: string | null;
   is_remote: boolean | null;
+  relevance_score: number | null;
+  relevance_reason: string | null;
 }
 
 export interface JobSearchResponse {

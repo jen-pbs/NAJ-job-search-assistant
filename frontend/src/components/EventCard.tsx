@@ -6,9 +6,49 @@ import SaveToNotionButton from "./SaveToNotionButton";
 interface EventCardProps {
   event: Event;
   index: number;
+  calendarUrl?: string;
 }
 
-export default function EventCard({ event, index }: EventCardProps) {
+function buildGoogleCalendarUrl(event: Event, customCalUrl?: string): string {
+  const base = customCalUrl || "https://calendar.google.com/calendar/render";
+  const title = encodeURIComponent(event.title);
+  const details = encodeURIComponent(
+    `${event.description || ""}\n\nSource: ${event.source || ""}\n${event.url}`
+  );
+  const location = encodeURIComponent(event.location || "");
+
+  // Parse date for calendar
+  let dateParam = "";
+  if (event.date) {
+    // Try to parse "May 17-20, 2026" or "May 4, 2026"
+    const raw = event.date;
+    const months: Record<string, string> = {
+      jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
+      jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
+      january: "01", february: "02", march: "03", april: "04", june: "06",
+      july: "07", august: "08", september: "09", october: "10",
+      november: "11", december: "12",
+    };
+    const m = raw.match(/(\w+)\s+(\d{1,2})(?:\s*[-–]\s*(?:\w+\s+)?(\d{1,2}))?,?\s*(\d{4})/i);
+    if (m) {
+      const mon = months[m[1].toLowerCase()] || "01";
+      const day = m[2].padStart(2, "0");
+      const year = m[4];
+      const startDate = `${year}${mon}${day}`;
+      if (m[3]) {
+        const endDay = String(parseInt(m[3]) + 1).padStart(2, "0");
+        dateParam = `&dates=${startDate}/${year}${mon}${endDay}`;
+      } else {
+        const nextDay = String(parseInt(m[2]) + 1).padStart(2, "0");
+        dateParam = `&dates=${startDate}/${year}${mon}${nextDay}`;
+      }
+    }
+  }
+
+  return `${base}?action=TEMPLATE&text=${title}&details=${details}&location=${location}${dateParam}`;
+}
+
+export default function EventCard({ event, index, calendarUrl }: EventCardProps) {
   const sourceColors: Record<string, string> = {
     Eventbrite: "bg-orange-50 text-orange-600 border-orange-200",
     Meetup: "bg-red-50 text-red-600 border-red-200",
@@ -112,6 +152,18 @@ export default function EventCard({ event, index }: EventCardProps) {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
                 </svg>
                 View
+              </a>
+              <a
+                href={buildGoogleCalendarUrl(event, calendarUrl)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-600 border border-emerald-200/60 rounded-lg hover:bg-emerald-50 transition-colors"
+                title="Add to Google Calendar"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                </svg>
+                Add to Calendar
               </a>
               <SaveToNotionButton
                 purpose="events"

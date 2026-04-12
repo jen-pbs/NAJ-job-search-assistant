@@ -67,7 +67,9 @@ async def find_people(
                 ai_api_key=body.ai_api_key,
                 ai_base_url=body.ai_base_url,
             )
+            print(f"[Search] AI connection resolved: provider={ai_connection.get('provider')}, has_key={bool(ai_connection.get('api_key'))}")
         except ValueError as e:
+            print(f"[Search] AI connection failed: {e}")
             if ai_config_explicit:
                 raise HTTPException(status_code=400, detail=f"AI settings error: {e}")
 
@@ -148,6 +150,7 @@ async def find_people(
                 print(f"Enrichment failed (continuing without): {e}")
 
             if ai_connection:
+                print(f"[Search] Starting AI scoring for {len(merged_profiles)} profiles...")
                 try:
                     profiles = await score_merged_profiles(
                         merged_profiles,
@@ -157,8 +160,10 @@ async def find_people(
                         body.ai_model or settings.ai_model,
                         ai_connection["base_url"],
                     )
+                    scored_count = sum(1 for p in profiles if p.relevance_score is not None)
+                    print(f"[Search] AI scoring complete: {scored_count}/{len(profiles)} scored")
                 except Exception as e:
-                    print(f"AI scoring failed, returning unscored results: {e}")
+                    print(f"[Search] AI scoring FAILED: {e}")
                     from app.services.ai_scorer import _merged_to_linkedin
                     profiles = [_merged_to_linkedin(m) for m in merged_profiles]
             else:

@@ -131,6 +131,14 @@ _SOURCE_NAMES = {
     "healthecareers": "HealthECareers", "usajobs": "USAJobs",
     "higheredjobs": "HigherEdJobs", "academickeys": "AcademicKeys",
     "wellfound": "Wellfound", "builtin": "BuiltIn", "craigslist": "Craigslist",
+    "genentech": "Genentech", "gene.com": "Genentech", "gilead": "Gilead",
+    "abbvie": "AbbVie", "biomarin": "BioMarin", "exelixis": "Exelixis",
+    "roche.com": "Roche", "pfizer": "Pfizer", "bms.com": "BMS",
+    "merck.com": "Merck", "amgen": "Amgen", "bridgebio": "BridgeBio",
+    "revolutionmedicines": "Revolution Medicines", "vaxcyte": "Vaxcyte",
+    "denalitherapeutics": "Denali", "arcusbio": "Arcus Bio",
+    "smartrecruiters": "SmartRecruiters", "greenhouse": "Greenhouse",
+    "lever.co": "Lever", "myworkdayjobs": "Workday",
 }
 
 
@@ -166,10 +174,17 @@ def _is_specific_job_url(url: str) -> bool:
         if any(p in u for p in ["/viewjob", "jk=", "/rc/clk", "/pagead/"]):
             return True
         # Reject search/browse pages
-        if any(p in u for p in ["/jobs?q=", "/jobs?", "/companies/", "/career-advice/"]):
+        if re.search(r"/q-[^/]+-jobs\.html", u):
+            return False  # /q-title-l-city-jobs.html = search page
+        if any(p in u for p in ["/jobs?q=", "/companies/", "/career-advice/"]):
             return False
         # Accept /jobs/slug-title-hexid patterns
-        return bool(re.search(r"/jobs/[a-z].*-[0-9a-f]{8,}", u))
+        if re.search(r"/jobs/[a-z].*-[0-9a-f]{8,}", u):
+            return True
+        # Accept /job/ paths (company-posted)
+        if "/job/" in u:
+            return True
+        return False
     if "glassdoor.com" in u:
         # Reject search/browse/aggregator pages
         if re.search(r"SRCH_KO", u):
@@ -219,6 +234,28 @@ def _is_specific_job_url(url: str) -> bool:
         return bool(re.search(r"/\d+\.html", u))
     if "sciencecareers.org" in u or "aaas.org" in u:
         return bool(re.search(r"/job/\d+", u))
+    # Company career pages (Bay Area biotech/pharma)
+    _career_domains = [
+        "genentech.com", "gene.com", "gilead.com", "abbvie.com", "biomarin.com",
+        "exelixis.com", "rigel.com", "nektar.com", "roche.com", "pfizer.com",
+        "bms.com", "merck.com", "amgen.com", "bridgebio.com", "revolutionmedicines.com",
+        "vaxcyte.com", "arcusbio.com", "denalitherapeutics.com", "orionpharma.com",
+        "acadia.com", "oric-pharma.com", "insitro.com",
+    ]
+    for domain in _career_domains:
+        if domain in u:
+            if "/careers" in u or "/jobs" in u or "/job-board" in u or "/openings" in u:
+                return True
+            return False
+    # ATS platforms (SmartRecruiters, Greenhouse, Lever, Workday)
+    if "jobs.smartrecruiters.com" in u:
+        return bool(re.search(r"/\d{10,}", u))  # SmartRecruiters job IDs are long numbers
+    if "boards.greenhouse.io" in u:
+        return bool(re.search(r"/jobs/\d+", u))
+    if "jobs.lever.co" in u:
+        return bool(re.search(r"/[a-f0-9-]{20,}", u))
+    if "myworkdayjobs.com" in u:
+        return bool(re.search(r"/job/", u))
     return False
 
 
@@ -1240,7 +1277,8 @@ def _search_jobs_sync(query: str, location: str | None, max_results: int = 25) -
 
     queries = [
         # Major boards -- broad site: without path restriction for better DDG coverage
-        f'site:indeed.com {query}{loc_str}',
+        f'site:indeed.com/viewjob {query}{loc_str}',
+        f'site:indeed.com/jobs {query}{loc_str}',
         f'site:linkedin.com/jobs {query}{loc_str}',
         f'site:glassdoor.com/job-listing {query}{loc_str}',
         f'site:ziprecruiter.com {query}{loc_str}',
@@ -1250,6 +1288,13 @@ def _search_jobs_sync(query: str, location: str | None, max_results: int = 25) -
         f'(site:wellfound.com OR site:builtin.com) {query}{loc_str}',
         f'(site:pharmiweb.com OR site:sciencecareers.org) {query}{loc_str}',
         f'site:craigslist.org {query} job{loc_str}',
+        # Bay Area biotech/pharma company career pages
+        f'(site:genentech.com/careers OR site:gene.com/careers OR site:gilead.com/careers OR site:abbvie.com/careers) {query}{loc_str}',
+        f'(site:biomarin.com/careers OR site:exelixis.com/careers OR site:rigel.com/careers OR site:nektar.com/careers) {query}{loc_str}',
+        f'(site:careers.roche.com OR site:pfizer.com/careers OR site:bms.com/careers OR site:merck.com/careers) {query}{loc_str}',
+        f'(site:amgen.com/careers OR site:bridgebio.com/careers OR site:revolutionmedicines.com/careers) {query}{loc_str}',
+        # SmartRecruiters, Greenhouse, Lever -- popular ATS used by Bay Area biotechs
+        f'(site:jobs.smartrecruiters.com OR site:boards.greenhouse.io OR site:jobs.lever.co) {query} biotech pharma{loc_str}',
         # Generic catches results from any board or company career page
         f'{query} hiring job opening biotech pharma healthcare{loc_str}',
         f'{query} job opportunity career{loc_str}',

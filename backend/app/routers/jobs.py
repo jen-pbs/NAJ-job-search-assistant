@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.config import Settings, get_settings
 from app.models.jobs import JobSearchQuery, JobSearchResponse
 from app.services.job_search import search_jobs, interpret_job_query
+from app.services.ai_job_scorer import score_jobs
 from app.services.ai_provider import resolve_ai_connection
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -53,6 +54,20 @@ async def find_jobs(
             location=interpreted.location or body.location,
             max_results=interpreted.max_results,
         )
+
+        # AI scoring -- rank jobs by fit to user background
+        if ai_connection and body.user_context:
+            try:
+                jobs = await score_jobs(
+                    jobs=jobs,
+                    query=body.query,
+                    api_key=ai_connection["api_key"],
+                    user_context=body.user_context,
+                    ai_model=body.ai_model or settings.ai_model,
+                    ai_base_url=ai_connection["base_url"],
+                )
+            except Exception as e:
+                print(f"Job scoring failed (results returned unscored): {e}")
 
         return JobSearchResponse(
             query_used=query_used,

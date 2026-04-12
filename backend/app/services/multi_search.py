@@ -132,18 +132,24 @@ def _search_duckduckgo(query: str, max_results: int = 25) -> list[RawResult]:
             encoded = urllib.parse.quote_plus(query)
             url = f"https://duckduckgo.com/?q={encoded}"
             page.goto(url, wait_until="domcontentloaded")
-            time.sleep(random.uniform(1.2, 2.0))
+            time.sleep(random.uniform(2.0, 3.0))
 
-            for _ in range(2):
+            # Scroll aggressively for more results
+            for _ in range(3):
                 page.keyboard.press("End")
                 time.sleep(0.5)
-                try:
-                    more = page.locator("button:has-text('More results'), button:has-text('More Results'), a:has-text('More results')")
-                    if more.count() > 0:
-                        more.first.click()
-                        time.sleep(random.uniform(0.8, 1.2))
-                except Exception:
-                    pass
+
+            # Click "More Results" button
+            try:
+                more = page.locator("button", has_text=re.compile(r"More\s+Results", re.IGNORECASE))
+                if more.count() > 0:
+                    more.first.click()
+                    time.sleep(1.5)
+                    for _ in range(2):
+                        page.keyboard.press("End")
+                        time.sleep(0.5)
+            except Exception:
+                pass
 
             articles = page.locator("article")
             seen: set[str] = set()
@@ -194,8 +200,8 @@ def _search_duckduckgo(query: str, max_results: int = 25) -> list[RawResult]:
 # Source: Bing
 # ---------------------------------------------------------------------------
 
-def _search_aol(query: str, max_results: int = 25) -> list[RawResult]:
-    """AOL Search (Yahoo/Bing-powered, different IP treatment than Yahoo direct)."""
+def _search_yahoo(query: str, max_results: int = 25) -> list[RawResult]:
+    """Yahoo Search (Bing-powered)."""
     import urllib.parse
     results = []
     with sync_playwright() as p:
@@ -203,7 +209,7 @@ def _search_aol(query: str, max_results: int = 25) -> list[RawResult]:
         page = context.new_page()
         try:
             encoded = urllib.parse.quote_plus(query)
-            url = f"https://search.aol.com/aol/search?q={encoded}&s=a&n=30"
+            url = f"https://search.yahoo.com/search?p={encoded}&n=30"
             page.goto(url, wait_until="domcontentloaded", timeout=12000)
             time.sleep(random.uniform(1.5, 2.5))
 
@@ -224,12 +230,16 @@ def _search_aol(query: str, max_results: int = 25) -> list[RawResult]:
                         continue
                     seen.add(_normalize_linkedin_url(li_url))
 
-                    title = link.inner_text().strip()
+                    title = ""
                     snippet = ""
                     full_text = ""
                     try:
-                        parent = link.locator("xpath=ancestor::div[contains(@class,'algo') or contains(@class,'result')]")
+                        parent = link.locator("xpath=ancestor::div[contains(@class,'algo') or contains(@class,'dd') or contains(@class,'result') or contains(@class,'Sr')]")
                         if parent.count() > 0:
+                            # Yahoo uses h3 for the title
+                            h3 = parent.first.locator("h3").first
+                            if h3.count() > 0:
+                                title = h3.inner_text().strip()
                             full_text = parent.first.inner_text().strip()
                             for line in full_text.split("\n"):
                                 line = line.strip()
@@ -239,14 +249,26 @@ def _search_aol(query: str, max_results: int = 25) -> list[RawResult]:
                     except Exception:
                         pass
 
+                    # Fallback: clean link text
+                    if not title or "linkedin" in title.lower():
+                        raw = link.inner_text().strip()
+                        for line in raw.split("\n"):
+                            line = line.strip()
+                            if line and "linkedin" not in line.lower() and "http" not in line.lower() and len(line) > 5:
+                                title = line
+                                break
+
+                    if not title:
+                        continue
+
                     results.append(RawResult(
                         linkedin_url=li_url, title=title,
-                        snippet=snippet, full_text=full_text[:600], source="aol",
+                        snippet=snippet, full_text=full_text[:600], source="yahoo",
                     ))
                 except Exception:
                     continue
         except Exception as e:
-            print(f"[AOL] search error: {e}")
+            print(f"[Yahoo] search error: {e}")
         finally:
             browser.close()
     return results
@@ -406,7 +428,7 @@ def _fetch_linkedin_chunk(urls: list[str]) -> dict[str, dict]:
         for url in urls:
             try:
                 page = context.new_page()
-                page.goto(url, wait_until="domcontentloaded", timeout=5000)
+                page.goto(url, wait_until="domcontentloaded", timeout=8000)
 
                 page_data: dict = {}
 
@@ -421,6 +443,17 @@ def _fetch_linkedin_chunk(urls: list[str]) -> dict[str, dict]:
                 meta_desc = page.locator('meta[name="description"]').first
                 if meta_desc.count() > 0:
                     page_data["meta_description"] = meta_desc.get_attribute("content") or ""
+
+                # Extract visible body text for experience/education/location
+                try:
+                    body_text = page.locator("body").inner_text(timeout=3000)
+                    if body_text and len(body_text) > 100:
+                        # LinkedIn auth walls have very little content
+                        low = body_text.lower()
+                        if "sign in" not in low[:200] or len(body_text) > 1000:
+                            page_data["body_text"] = body_text[:4000]
+                except Exception:
+                    pass
 
                 if page_data:
                     data[_normalize_linkedin_url(url)] = page_data
@@ -504,14 +537,27 @@ def _parse_headline_from_title(title: str) -> str | None:
 
 def _extract_location(text: str) -> str | None:
     m = re.search(r"Location:\s*([^·\n]+)", text, re.IGNORECASE)
-    if not m:
-        m = re.search(r"(?:located?\s+in|based\s+in|from)\s+([A-Z][^.·\-|\n]{3,40})", text, re.IGNORECASE)
-    return m.group(1).strip() if m else None
+    if m:
+        loc = m.group(1).strip()
+        loc = re.sub(r"\s*·.*$", "", loc).strip()
+        loc = re.sub(r"\.\s*\d+\+?\s*connections.*$", "", loc, flags=re.IGNORECASE).strip()
+        if loc and len(loc) < 60:
+            return loc
+    m = re.search(r"(?:located?\s+in|based\s+in|from)\s+([A-Z][^.·\-|\n]{3,40})", text, re.IGNORECASE)
+    if m:
+        return m.group(1).strip()
+    return None
 
 
 def _extract_experience(text: str) -> str | None:
     m = re.search(r"Experience:?\s*(.+?)(?:\s*·\s*Education|$)", text, re.IGNORECASE)
-    return m.group(1).strip()[:300] if m else None
+    if m:
+        exp = m.group(1).strip()
+        # Clean trailing location/connections boilerplate
+        exp = re.sub(r"\s*·\s*Location:.*$", "", exp).strip()
+        exp = re.sub(r"\s*\d+\+?\s*connections.*$", "", exp, flags=re.IGNORECASE).strip()
+        return exp[:300] if exp else None
+    return None
 
 
 def _extract_education(text: str) -> str | None:
@@ -519,13 +565,80 @@ def _extract_education(text: str) -> str | None:
     return m.group(1).strip()[:200] if m else None
 
 
+def _extract_location_from_body(body: str) -> str | None:
+    """Extract location from LinkedIn page body text."""
+    lines = body.split("\n")
+    for i, line in enumerate(lines):
+        line = line.strip()
+        # LinkedIn format: "City, State, Country  Contact Info"
+        m = re.match(r"^([A-Z][a-zA-Z. ]+,\s*[A-Za-z ]+(?:,\s*[A-Za-z ]+)?)\s*(?:Contact Info|$)", line)
+        if m:
+            loc = m.group(1).strip().rstrip(",")
+            # Validate it's not a menu item
+            if len(loc) > 5 and len(loc) < 80:
+                return loc
+        # "Greater X Area" or "X Bay Area" or "X Metropolitan Area"
+        if re.match(r"^(Greater\s+)?[A-Z][a-zA-Z. ]+(Bay\s+Area|Metropolitan\s+Area|Area)\s*$", line):
+            return line.strip()
+    return None
+
+
+def _extract_experience_from_body(body: str) -> str | None:
+    """Extract recent experience from LinkedIn page body text."""
+    lines = body.split("\n")
+    in_exp = False
+    exp_items = []
+    for line in lines:
+        line = line.strip()
+        if line.lower() == "experience":
+            in_exp = True
+            continue
+        if in_exp:
+            if line.lower() in ("education", "skills", "licenses & certifications",
+                                 "volunteer experience", "courses", "honors & awards",
+                                 "languages", "interests", "recommendations", "activity"):
+                break
+            if len(line) > 3 and not line.startswith("Show "):
+                exp_items.append(line)
+                if len(exp_items) >= 6:
+                    break
+    if exp_items:
+        return " · ".join(exp_items[:6])[:300]
+    return None
+
+
+def _extract_education_from_body(body: str) -> str | None:
+    """Extract education from LinkedIn page body text."""
+    lines = body.split("\n")
+    in_edu = False
+    edu_items = []
+    for line in lines:
+        line = line.strip()
+        if line.lower() == "education":
+            in_edu = True
+            continue
+        if in_edu:
+            if line.lower() in ("skills", "licenses & certifications",
+                                 "volunteer experience", "courses", "honors & awards",
+                                 "languages", "interests", "recommendations", "activity"):
+                break
+            if len(line) > 3 and not line.startswith("Show "):
+                edu_items.append(line)
+                if len(edu_items) >= 4:
+                    break
+    if edu_items:
+        return " · ".join(edu_items[:4])[:200]
+    return None
+
+
 def _parse_public_page(page_data: dict) -> dict:
     """Extract structured info from LinkedIn public page metadata."""
+    import html as _html
     info: dict = {}
 
-    og_desc = page_data.get("og_description", "")
-    meta_desc = page_data.get("meta_description", "")
-    og_title = page_data.get("og_title", "")
+    og_desc = _html.unescape(page_data.get("og_description", "") or "")
+    meta_desc = _html.unescape(page_data.get("meta_description", "") or "")
+    og_title = _html.unescape(page_data.get("og_title", "") or "")
 
     # og:description often has: "Role at Company · Experience: X · Education: Y · Location: Z · 500+ connections"
     best_desc = og_desc if len(og_desc) > len(meta_desc) else meta_desc
@@ -553,10 +666,28 @@ def _parse_public_page(page_data: dict) -> dict:
     if og_title:
         info["og_title"] = og_title
 
-    # Parse visible text for additional data
-    visible = page_data.get("visible_text", "") or page_data.get("body_text", "")
-    if visible and len(visible) > 50:
-        info["visible_text"] = visible[:800]
+    # Parse body text for additional data when meta tags are incomplete
+    body = page_data.get("body_text", "")
+    if body and len(body) > 100:
+        info["visible_text"] = body[:800]
+
+        # Extract location from body if not found in meta
+        if not info.get("location"):
+            loc = _extract_location_from_body(body)
+            if loc:
+                info["location"] = loc
+
+        # Extract experience from body if not found in meta
+        if not info.get("experience_text"):
+            exp = _extract_experience_from_body(body)
+            if exp:
+                info["experience_text"] = exp
+
+        # Extract education from body if not found in meta
+        if not info.get("education_text"):
+            edu = _extract_education_from_body(body)
+            if edu:
+                info["education_text"] = edu
 
     return info
 
@@ -638,7 +769,12 @@ def _merge_results(
             if not profile.location:
                 loc = _extract_location(combined_text)
                 if loc:
-                    profile.location = loc
+                    # Clean LinkedIn boilerplate from location
+                    loc = re.sub(r"\s*\.{3,}.*$", "", loc).strip()
+                    loc = re.sub(r"\s*\d+\+?\s*connections.*$", "", loc, flags=re.IGNORECASE).strip()
+                    loc = re.sub(r"\s*on\s+LinkedIn.*$", "", loc, flags=re.IGNORECASE).strip()
+                    if loc and len(loc) < 60:
+                        profile.location = loc
 
             # Extract experience/education from any source
             if not profile.experience_text:
@@ -722,6 +858,21 @@ def build_search_queries(
 
     queries = [" ".join(parts)]
 
+    # Add a broader version without quoted location for better coverage
+    # Use key words from the query to stay relevant
+    if location:
+        broad_parts = [base, query, location]
+        if seniority:
+            broad_parts.append(f'"{seniority}"')
+        queries.append(" ".join(broad_parts))
+
+        # Also add a focused HEOR-specific query if HEOR-related terms are present
+        heor_terms = ["heor", "health economics", "outcomes research", "rwe", "real world evidence",
+                      "market access", "medical affairs"]
+        query_lower = query.lower()
+        if any(term in query_lower for term in heor_terms):
+            queries.append(f'{base} HEOR "health economics" pharma biotech {location}')
+
     if companies and len(companies) > 5:
         mid = len(companies) // 2
         for chunk in [companies[:mid], companies[mid:]]:
@@ -768,26 +919,35 @@ async def search_linkedin_profiles_multi(
     # Each source gets the same primary query for consistency
     loop = asyncio.get_event_loop()
 
-    print(f"[MultiSearch] Launching parallel searches across 4 engines...")
+    # Build both primary and broad queries
+    broad_query = search_queries[1] if len(search_queries) > 1 else None
+
+    print(f"[MultiSearch] Launching parallel searches across engines...")
     start_time = time.time()
 
-    # Run all 4 search engines in parallel
-    # DDG + Startpage (Google proxy) + AOL (Yahoo/Bing-powered) + Brave (fallback)
-    ddg_future = loop.run_in_executor(_executor, _search_duckduckgo, primary_query, max_results)
-    startpage_future = loop.run_in_executor(_executor, _search_startpage, primary_query, max_results)
-    aol_future = loop.run_in_executor(_executor, _search_aol, primary_query, max_results)
-    brave_future = loop.run_in_executor(_executor, _search_brave, primary_query, max_results)
+    # Run all engines in parallel with BOTH primary and broad queries
+    # Primary: quoted location for precision. Broad: unquoted for coverage.
+    futures = {
+        "DDG": loop.run_in_executor(_executor, _search_duckduckgo, primary_query, max_results),
+        "Startpage": loop.run_in_executor(_executor, _search_startpage, primary_query, max_results),
+        "Yahoo": loop.run_in_executor(_executor, _search_yahoo, primary_query, max_results),
+        "Brave": loop.run_in_executor(_executor, _search_brave, primary_query, max_results),
+    }
+    # Run additional queries for broader coverage
+    if broad_query:
+        futures["DDG-broad"] = loop.run_in_executor(_executor, _search_duckduckgo, broad_query, max_results)
+    # If there's a focused HEOR query, run it on Startpage
+    if len(search_queries) > 2:
+        futures["Startpage-HEOR"] = loop.run_in_executor(_executor, _search_startpage, search_queries[2], max_results)
 
-    # Wait for all to complete (or fail gracefully)
-    ddg_results, startpage_results, aol_results, brave_results = await asyncio.gather(
-        ddg_future, startpage_future, aol_future, brave_future,
-        return_exceptions=True,
-    )
+    results_map = {}
+    gathered = await asyncio.gather(*futures.values(), return_exceptions=True)
+    for (name, _), result in zip(futures.items(), gathered):
+        results_map[name] = result
 
-    # Handle any exceptions from individual engines
     all_source_results: list[list[RawResult]] = []
-    for name, result in [("DDG", ddg_results), ("Startpage", startpage_results),
-                         ("AOL", aol_results), ("Brave", brave_results)]:
+    for name in futures:
+        result = results_map[name]
         if isinstance(result, Exception):
             print(f"[MultiSearch] {name} failed: {result}")
             all_source_results.append([])
@@ -798,14 +958,22 @@ async def search_linkedin_profiles_multi(
     elapsed = time.time() - start_time
     print(f"[MultiSearch] All searches completed in {elapsed:.1f}s")
 
-    # Always run alternative term searches in parallel to get more diverse results
-    # This compensates for engines that may be blocked and widens the net
+    # If coverage is still low, run Startpage with broad query too
+    total_raw = sum(len(r) for r in all_source_results)
+    if broad_query and total_raw < 20:
+        print(f"[MultiSearch] Running extra broad search (only {total_raw} results so far)...")
+        extra = await loop.run_in_executor(_executor, _search_startpage, broad_query, max_results)
+        if not isinstance(extra, Exception) and extra:
+            all_source_results.append(extra)
+            print(f"[MultiSearch] Startpage-broad: {len(extra)} results")
+
+    # Alternative term searches
     if alternative_terms:
         alt_futures = []
         for alt in alternative_terms[:2]:
             alt_q = build_search_queries(alt, location, companies, seniority)[0]
             alt_futures.append(loop.run_in_executor(_executor, _search_duckduckgo, alt_q, 15))
-            alt_futures.append(loop.run_in_executor(_executor, _search_aol, alt_q, 10))
+            alt_futures.append(loop.run_in_executor(_executor, _search_yahoo, alt_q, 10))
 
         alt_results_list = await asyncio.gather(*alt_futures, return_exceptions=True)
         for i, alt_r in enumerate(alt_results_list):

@@ -189,12 +189,3 @@ frontend/         Web interface (Next.js + Tailwind)
 ## Credits
 
 Built by [Jen](https://github.com/jen-pbs) with engineering assistance from [Droid](https://factory.ai) (Factory AI).
-
-**Architecture and implementation by Droid:**
-- Multi-source search engine (DuckDuckGo, Startpage, AOL, Brave) with parallel execution
-- Page-first job and event extraction with JSON-LD schema parsing
-- CAPTCHA/auth wall detection with graceful snippet fallback
-- AI scoring and ranking system for people and jobs
-- Bay Area biotech/pharma career page integration
-- Notion auto-mapping and multi-database support
-- Google Calendar event integration
